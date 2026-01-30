@@ -28,11 +28,12 @@ def print_hello():
     return "Hello World!"
 
 
-def print_date():
-    """Print the current date and time."""
-    current_time = datetime.now()
-    print(f"Current date and time: {current_time}")
-    return str(current_time)
+def print_date(**context):
+    """Print the DAG execution date."""
+    execution_date = context.get('logical_date') or context.get('execution_date')
+    print(f"DAG execution date: {execution_date}")
+    print(f"Current time: {datetime.now()}")
+    return str(execution_date)
 
 
 # Define the DAG
@@ -40,8 +41,8 @@ with DAG(
     'hello_world',
     default_args=default_args,
     description='A simple hello world DAG',
-    schedule_interval=timedelta(days=1),
-    start_date=datetime(2024, 1, 1),
+    schedule='@daily',  # Run once a day
+    start_date=datetime(2026, 1, 1),
     catchup=False,
     tags=['example', 'hello-world'],
 ) as dag:
