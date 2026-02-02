@@ -7,7 +7,6 @@ from typing import Any
 
 import pendulum
 from airflow.decorators import dag, task
-from airflow.operators.python import get_current_context
 
 # The task runs ingestion inside an isolated virtualenv; do not import
 # project packages at DAG-parse time (they may not be installed on the
@@ -27,6 +26,7 @@ default_args = {
     start_date=pendulum.datetime(2024, 1, 1, tz="UTC"),
     schedule="@monthly",
     catchup=False,
+    render_template_as_native_obj=True,
     params={
         # Editable DAG parameter; the UI exposes `ingest_defaults` as a
         # JSON-like object. Runs can override by passing a DagRun.conf
@@ -61,15 +61,17 @@ default_args = {
 def sentinel2_l1c_ingestion() -> None:
     """Define the Sentinel-2 L1C ingestion DAG using TaskFlow tasks."""
 
-    @task.python(task_id="ingest_13_bands")
-    def ingest_13_bands() -> str:
-        """Run ingestion using host Python environment dependencies."""
-        context = get_current_context()
-        dag_params = context.get("params", {})
-        dag_run = context.get("dag_run")
-        run_conf = dag_run.conf if dag_run else {}
-        ingest = run_conf.get("ingest", dag_params.get("ingest_defaults", {}))
-
+    @task.virtualenv(
+        task_id="ingest_13_bands",
+        requirements=[
+            "pystac-client",
+            "odc-stac",
+            "horseless-atmospheric-correction @ https://pkgs.dev.azure.com/wizardcontroller/MetOffice/_apis/packaging/feeds/29c04fda-7517-4d3b-872e-1134a0ecf4da/pypi/packages/horseless-atmospheric-correction/versions/0.0.2/horseless_atmospheric_correction-0.0.2-py2.py3-none-any.whl/content"
+        ],
+        system_site_packages=False,
+    )
+    def ingest_13_bands(ingest: dict[str, Any]) -> str:
+        """Run ingestion inside a task-scoped virtualenv."""
         if not isinstance(ingest, dict):
             ingest = {}
 
@@ -119,7 +121,9 @@ def sentinel2_l1c_ingestion() -> None:
         print(f"Successfully ingested {len(ds.data_vars)} spectral bands.")
         return "Ingestion Complete"
 
-    ingest_13_bands()
+    ingest_13_bands(
+        ingest="{{ dag_run.conf.get('ingest', params.ingest_defaults) }}",
+    )
 
 
 dag = sentinel2_l1c_ingestion()
