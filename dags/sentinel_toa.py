@@ -1,5 +1,6 @@
 from airflow import DAG
 from airflow.providers.standard.operators.python import PythonOperator
+from airflow.operators.python import PythonVirtualenvOperator
 import pendulum
 from datetime import timedelta
 from pystac_client import Client
@@ -49,6 +50,40 @@ with DAG(
             'groupby': 'solar_day',
             'chunks': {'x': 2048, 'y': 2048},
         }
+    )
+    
+    # Alternative: use PythonVirtualenvOperator to install task-specific
+    # Python packages in an isolated venv. This avoids building custom images
+    # for every dependency set. Use when packages are pure-Python and have
+    # no system-level binary dependencies.
+    def _virtualenv_ingest(endpoint, bbox, date_range, collections=None, query=None, bands=None, resolution=10, groupby='solar_day', chunks=None):
+        # imports inside function so they run inside the virtualenv
+        from pystac_client import Client
+        import odc.stac
+
+        catalog = Client.open(endpoint)
+        search = catalog.search(collections=collections or ["sentinel-2-l1c"], bbox=bbox, datetime=date_range, query=(query or {"eo:cloud_cover": {"lt": 10}}))
+        ds = odc.stac.load(
+            search.items(),
+            bands=bands,
+            bbox=bbox,
+            resolution=resolution,
+            groupby=groupby,
+            chunks=chunks,
+        )
+        print(f"Successfully ingested {len(ds.data_vars)} spectral bands.")
+        return "Ingestion Complete"
+
+    venv_task = PythonVirtualenvOperator(
+        task_id='ingest_13_bands_venv',
+        python_callable=_virtualenv_ingest,
+        requirements=['pystac-client', 'odc-stac'],
+        system_site_packages=False,
+        op_kwargs={
+            'endpoint': 'https://earth-search.aws.element84.com/v1',
+            'bbox': [13.0, 45.0, 13.5, 45.5],
+            'date_range': '2023-12-01/2023-12-31',
+        },
     )
 
 
