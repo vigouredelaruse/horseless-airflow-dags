@@ -66,7 +66,7 @@ def sentinel2_l1c_ingestion() -> None:
         requirements=[
             "pystac-client",
             "odc-stac",
-            "horseless-atmospheric-correction @ https://pkgs.dev.azure.com/wizardcontroller/MetOffice/_apis/packaging/feeds/29c04fda-7517-4d3b-872e-1134a0ecf4da/pypi/packages/horseless-atmospheric-correction/versions/0.0.2/horseless_atmospheric_correction-0.0.2-py2.py3-none-any.whl/content"
+            "horseless-atmospheric-correction @ https://pkgs.dev.azure.com/wizardcontroller/MetOffice/_apis/packaging/feeds/29c04fda-7517-4d3b-872e-1134a0ecf4da/pypi/packages/horseless-atmospheric-correction/versions/0.0.2/horseless_atmospheric_correction-0.0.2-py2.py3-none-any.whl"
         ],
         system_site_packages=False,
     )
