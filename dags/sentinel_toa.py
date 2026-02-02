@@ -1,7 +1,13 @@
-from airflow import DAG
-from airflow.operators.python import PythonVirtualenvOperator
-import pendulum
+"""Sentinel-2 L1C ingestion DAG using TaskFlow API."""
+
+from __future__ import annotations
+
 from datetime import timedelta
+from typing import Any
+
+import pendulum
+from airflow.decorators import dag, task
+from airflow.operators.python import get_current_context
 
 # The task runs ingestion inside an isolated virtualenv; do not import
 # project packages at DAG-parse time (they may not be installed on the
@@ -9,106 +15,117 @@ from datetime import timedelta
 # required wheel listed in `requirements`.
 
 default_args = {
-    'owner': 'airflow',
-    'retries': 1,
-    'retry_delay': timedelta(minutes=5),
+    "owner": "airflow",
+    "retries": 1,
+    "retry_delay": timedelta(minutes=5),
 }
 
-with DAG(
-    dag_id='sentinel2_l1c_ingestion',
+
+@dag(
+    dag_id="sentinel2_l1c_ingestion",
     default_args=default_args,
     start_date=pendulum.datetime(2024, 1, 1, tz="UTC"),
-    schedule='@monthly',
+    schedule="@monthly",
     catchup=False,
     params={
         # Editable DAG parameter; the UI exposes `ingest_defaults` as a
         # JSON-like object. Runs can override by passing a DagRun.conf
         # with key `ingest`.
-        'ingest_defaults': {
-            'endpoint': 'https://earth-search.aws.element84.com/v1',
-            'collections': ['sentinel-2-l1c'],
-            'query': {'eo:cloud_cover': {'lt': 10}},
-            'groupby': 'solar_day',
-            'bbox': [13.0, 45.0, 13.5, 45.5],
-            'date_range': '2023-12-01/2023-12-31',
-            'resolution': 10,
-            'chunks': {'x': 2048, 'y': 2048},
-            'bands': [
-                'blue', 'green', 'red', 'nir', 'swir16', 'swir22',
-                'rededge1', 'rededge2', 'rededge3', 'nir08',
-                'coastal', 'water', 'cirrus',
+        "ingest_defaults": {
+            "endpoint": "https://earth-search.aws.element84.com/v1",
+            "collections": ["sentinel-2-l1c"],
+            "query": {"eo:cloud_cover": {"lt": 10}},
+            "groupby": "solar_day",
+            "bbox": [13.0, 45.0, 13.5, 45.5],
+            "date_range": "2023-12-01/2023-12-31",
+            "resolution": 10,
+            "chunks": {"x": 2048, "y": 2048},
+            "bands": [
+                "blue",
+                "green",
+                "red",
+                "nir",
+                "swir16",
+                "swir22",
+                "rededge1",
+                "rededge2",
+                "rededge3",
+                "nir08",
+                "coastal",
+                "water",
+                "cirrus",
             ],
         }
     },
-) as dag:
+)
+def sentinel2_l1c_ingestion() -> None:
+    """Define the Sentinel-2 L1C ingestion DAG using TaskFlow tasks."""
 
-    # Primary task: run ingestion in an isolated virtualenv so task-specific
-    # Python dependencies do not need to be installed on the worker image.
-    
-    # Alternative: use PythonVirtualenvOperator to install task-specific
-    # Python packages in an isolated venv. This avoids building custom images
-    # for every dependency set. Use when packages are pure-Python and have
-    # no system-level binary dependencies.
-    def _virtualenv_ingest(ingest: dict):
-        # imports inside function so they run inside the virtualenv
+    @task.python(task_id="ingest_13_bands")
+    def ingest_13_bands() -> str:
+        """Run ingestion using host Python environment dependencies."""
+        context = get_current_context()
+        dag_params = context.get("params", {})
+        dag_run = context.get("dag_run")
+        run_conf = dag_run.conf if dag_run else {}
+        ingest = run_conf.get("ingest", dag_params.get("ingest_defaults", {}))
+
+        if not isinstance(ingest, dict):
+            ingest = {}
+
+        # imports inside task to avoid DAG-parse failures
         from pystac_client import Client
         import odc.stac
 
-        # Build the typed message inside the venv using the installed package
         try:
-            from horseless_atmospheric_correction.ingest.models.msg_ingest_sentinel import IngestSentineMessage
+            from horseless_atmospheric_correction.ingest.models.msg_ingest_sentinel import (
+                IngestSentineMessage,
+            )
         except Exception:
-            # Fallback: accept dict-like ingest input as-is if package import fails
-            raise ImportError("horseless_atmospheric_correction package not available in virtualenv.")
+            raise ImportError(
+                "Failed to import IngestSentineMessage from "
+                "horseless_atmospheric_correction. Ensure the package is "
+                "installed in the task virtualenv."
+            ) from None
 
+        msg: Any
         if IngestSentineMessage and isinstance(ingest, dict):
             msg = IngestSentineMessage(**ingest)
         else:
-            # If the dataclass isn't available, treat `ingest` as a simple namespace
             class SimpleMsg:
+                """Fallback message container for ingestion settings."""
+
                 pass
 
             msg = SimpleMsg()
-            for k, v in (ingest or {}).items():
-                setattr(msg, k, v)
+            for key, value in ingest.items():
+                setattr(msg, key, value)
 
-        catalog = Client.open(msg.endpoint)
+        catalog = Client.open(getattr(msg, "endpoint", None))
         search = catalog.search(
-            collections=getattr(msg, 'collections', None) or ['sentinel-2-l1c'],
-            bbox=getattr(msg, 'bbox', None),
-            datetime=getattr(msg, 'date_range', None),
-            query=getattr(msg, 'query', None),
+            collections=getattr(msg, "collections", None) or ["sentinel-2-l1c"],
+            bbox=getattr(msg, "bbox", None),
+            datetime=getattr(msg, "date_range", None),
+            query=getattr(msg, "query", None),
         )
         ds = odc.stac.load(
             search.items(),
-            bands=getattr(msg, 'bands', None),
-            bbox=getattr(msg, 'bbox', None),
-            resolution=getattr(msg, 'resolution', None),
-            groupby=getattr(msg, 'groupby', None),
-            chunks=getattr(msg, 'chunks', None),
+            bands=getattr(msg, "bands", None),
+            bbox=getattr(msg, "bbox", None),
+            resolution=getattr(msg, "resolution", None),
+            groupby=getattr(msg, "groupby", None),
+            chunks=getattr(msg, "chunks", None),
         )
         print(f"Successfully ingested {len(ds.data_vars)} spectral bands.")
         return "Ingestion Complete"
 
-    venv_task = PythonVirtualenvOperator(
-        task_id='ingest_13_bands',
-        python_callable=_virtualenv_ingest,
-        requirements=[
-                'pystac-client',
-                'odc-stac',
-                'pendulum',  
-                # 'horseless-atmospheric-correction'
-                ],
-        # index_urls=['https://pypi.org/simple','https://pkgs.dev.azure.com/wizardcontroller/MetOffice/_packaging/public/pypi/simple'],
-        system_site_packages=True,
-        # Pass a templated `ingest` dict; runs may override via DagRun.conf['ingest']
-        op_kwargs={
-            'ingest': "{{ dag_run.conf.get('ingest', params.ingest_defaults) }}",
-        },
-    )
+    ingest_13_bands()
 
 
-def test_dag(execution_date):
+dag = sentinel2_l1c_ingestion()
+
+
+def test_dag(execution_date: pendulum.DateTime) -> None:
     """Run the DAG in test mode using a compatibility wrapper.
 
     Different Airflow versions accept different keyword names for the
