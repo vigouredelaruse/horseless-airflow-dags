@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "horseless-airflow-dags"
+version = "0.0.0"
+description = "Airflow DAG collection for horseless project"
+requires-python = ">=3.8"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["horseless_airflow_dags*"]
+
+[tool.setuptools.package-dir]
+"" = "src"

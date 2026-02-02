@@ -1,0 +1,9 @@
+--index-url https://pkgs.dev.azure.com/wizardcontroller/MetOffice/_packaging/public/pypi/simple/
+--extra-index-url https://pypi.org/simple
+twine 
+keyring 
+artifacts-keyring
+pystac_client
+odc-stac
+apache-airflow
+horseless-atmospheric-correction
