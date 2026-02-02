@@ -6,4 +6,4 @@ artifacts-keyring
 pystac-client
 odc-stac
 apache-airflow
-horseless-atmospheric-correction --index-url https://pkgs.dev.azure.com/wizardcontroller/MetOffice/_packaging/public/pypi/simple
+horseless-atmospheric-correction 
