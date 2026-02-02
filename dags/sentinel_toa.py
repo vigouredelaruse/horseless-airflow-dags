@@ -66,7 +66,7 @@ def sentinel2_l1c_ingestion() -> None:
         requirements=[
             "pystac-client",
             "odc-stac",
-            "horseless-atmospheric-correction==0.0.2",
+            "horseless-atmospheric-correction==0.0.3",
         ],
         pip_install_options=[
             "--extra-index-url",
