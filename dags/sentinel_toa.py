@@ -52,7 +52,7 @@ default_args = {
                 "rededge3",
                 "nir08",
                 "coastal",
-                "water",
+                "water_vapor",
                 "cirrus",
             ],
         }
