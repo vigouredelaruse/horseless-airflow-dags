@@ -97,7 +97,7 @@ with DAG(
                 'pystac-client',
                 'odc-stac',
                 'pendulum',  
-                'horseless-atmospheric-correction --index-url https://pkgs.dev.azure.com/wizardcontroller/MetOffice/_packaging/public/pypi/simple'],
+                'horseless-atmospheric-correction'],
         index_urls=['https://pypi.org/simple','https://pkgs.dev.azure.com/wizardcontroller/MetOffice/_packaging/public/pypi/simple'],
         system_site_packages=True,
         # Pass a templated `ingest` dict; runs may override via DagRun.conf['ingest']
