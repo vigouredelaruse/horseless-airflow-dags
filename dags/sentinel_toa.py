@@ -1,10 +1,7 @@
 from airflow import DAG
-from airflow.providers.standard.operators.python import PythonOperator
 from airflow.operators.python import PythonVirtualenvOperator
 import pendulum
 from datetime import timedelta
-from pystac_client import Client
-import odc.stac
 
 # Use the packaged business logic wrapper which constructs the message
 # from primitive arguments (safe to pass via Airflow `op_kwargs`).
@@ -24,33 +21,8 @@ with DAG(
     catchup=False,
 ) as dag:
 
-    ingest_task = PythonOperator(
-        task_id='ingest_13_bands',
-        python_callable=ingest_sentinel_wrapper,
-        op_kwargs={
-            'endpoint': 'https://earth-search.aws.element84.com/v1',
-            'bbox': [13.0, 45.0, 13.5, 45.5],
-            'date_range': '2023-12-01/2023-12-10', 
-            'collections': ['sentinel-2-l1c'],
-            'query': {'eo:cloud_cover': {'lt': 10}},
-            'bands': [ "blue",
-            "green",
-            "red",
-            "nir",
-            "swir16",
-            "swir22",
-            "rededge1",
-            "rededge2",
-            "rededge3",
-            "nir08",
-            "coastal",
-            "water",
-            "cirrus"],
-            'resolution': 10,
-            'groupby': 'solar_day',
-            'chunks': {'x': 2048, 'y': 2048},
-        }
-    )
+    # Primary task: run ingestion in an isolated virtualenv so task-specific
+    # Python dependencies do not need to be installed on the worker image.
     
     # Alternative: use PythonVirtualenvOperator to install task-specific
     # Python packages in an isolated venv. This avoids building custom images
@@ -75,7 +47,7 @@ with DAG(
         return "Ingestion Complete"
 
     venv_task = PythonVirtualenvOperator(
-        task_id='ingest_13_bands_venv',
+        task_id='ingest_13_bands',
         python_callable=_virtualenv_ingest,
         requirements=['pystac-client', 'odc-stac'],
         system_site_packages=False,
