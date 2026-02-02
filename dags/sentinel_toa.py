@@ -3,9 +3,10 @@ from airflow.operators.python import PythonVirtualenvOperator
 import pendulum
 from datetime import timedelta
 
-# Use the packaged business logic wrapper which constructs the message
-# from primitive arguments (safe to pass via Airflow `op_kwargs`).
-from horseless_atmospheric_correction.ingest.aws_ingester import ingest_sentinel_wrapper
+# The task runs ingestion inside an isolated virtualenv; do not import
+# project packages at DAG-parse time (they may not be installed on the
+# scheduler/worker image). The virtualenv operator will install the
+# required wheel listed in `requirements`.
 
 default_args = {
     'owner': 'airflow',
@@ -32,7 +33,6 @@ with DAG(
         # imports inside function so they run inside the virtualenv
         from pystac_client import Client
         import odc.stac
-        import horseless_airflow_dags
 
         catalog = Client.open(endpoint)
         search = catalog.search(collections=collections or ["sentinel-2-l1c"], bbox=bbox, datetime=date_range, query=(query or {"eo:cloud_cover": {"lt": 10}}))
