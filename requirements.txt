@@ -3,7 +3,7 @@
 twine 
 keyring 
 artifacts-keyring
-pystac_client
+pystac-client
 odc-stac
 apache-airflow
 horseless-atmospheric-correction

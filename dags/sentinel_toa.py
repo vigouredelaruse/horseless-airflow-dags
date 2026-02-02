@@ -32,6 +32,7 @@ with DAG(
         # imports inside function so they run inside the virtualenv
         from pystac_client import Client
         import odc.stac
+        import horseless_airflow_dags
 
         catalog = Client.open(endpoint)
         search = catalog.search(collections=collections or ["sentinel-2-l1c"], bbox=bbox, datetime=date_range, query=(query or {"eo:cloud_cover": {"lt": 10}}))
@@ -49,7 +50,11 @@ with DAG(
     venv_task = PythonVirtualenvOperator(
         task_id='ingest_13_bands',
         python_callable=_virtualenv_ingest,
-        requirements=['pystac-client', 'odc-stac'],
+        requirements=[
+            'pystac-client', 
+            'odc-stac',
+            'pendulum',
+            'https://pkgs.dev.azure.com/wizardcontroller/MetOffice/_apis/packaging/feeds/29c04fda-7517-4d3b-872e-1134a0ecf4da/pypi/packages/horseless-atmospheric-correction/versions/0.0.2/horseless_atmospheric_correction-0.0.2-py2.py3-none-any.whl'],
         system_site_packages=False,
         op_kwargs={
             'endpoint': 'https://earth-search.aws.element84.com/v1',
