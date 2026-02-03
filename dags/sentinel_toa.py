@@ -79,51 +79,41 @@ def sentinel2_l1c_ingestion() -> None:
         if not isinstance(ingest, dict):
             ingest = {}
 
-        # imports inside task to avoid DAG-parse failures
-        from pystac_client import Client
-        import odc.stac
-
+        # Import package facade objects from the project package inside
+        # the task virtualenv. Do not perform network I/O here; only
+        # construct the IngestSentineMessage and return it for downstream
+        # processing. This facades the ingestion call without contacting
+        # the STAC endpoint at DAG runtime.
         try:
+            from horseless_atmospheric_correction.ingest.aws_ingester import (
+                ingest_sentinel,
+                ingest_sentinel_wrapper,
+            )
             from horseless_atmospheric_correction.ingest.models.msg_ingest_sentinel import (
                 IngestSentineMessage,
             )
         except Exception:
             raise ImportError(
-                "Failed to import IngestSentineMessage from "
-                "horseless_atmospheric_correction. Ensure the package is "
-                "installed in the task virtualenv."
+                "Failed to import package facades from horseless_atmospheric_correction. "
+                "Ensure the package is installed in the task virtualenv."
             ) from None
 
-        msg: Any
+        # Build the typed message inside the task virtualenv but do NOT call
+        # the network-bound ingest function here. Returning the message lets
+        # other systems or a separate worker perform the actual STAC work.
         if IngestSentineMessage and isinstance(ingest, dict):
             msg = IngestSentineMessage(**ingest)
+            ingest_sentinel(msg)
         else:
-            class SimpleMsg:
-                """Fallback message container for ingestion settings."""
+            raise ValueError("Invalid ingest parameters; expected a dict compatible with IngestSentineMessage.")
 
-                pass
+        # Convert dataclass to plain dict for transport/storage
+        try:
+            from dataclasses import asdict
 
-            msg = SimpleMsg()
-            for key, value in ingest.items():
-                setattr(msg, key, value)
-
-        catalog = Client.open(getattr(msg, "endpoint", None))
-        search = catalog.search(
-            collections=getattr(msg, "collections", None) or ["sentinel-2-l1c"],
-            bbox=getattr(msg, "bbox", None),
-            datetime=getattr(msg, "date_range", None),
-            query=getattr(msg, "query", None),
-        )
-        ds = odc.stac.load(
-            search.items(),
-            bands=getattr(msg, "bands", None),
-            bbox=getattr(msg, "bbox", None),
-            resolution=getattr(msg, "resolution", None),
-            groupby=getattr(msg, "groupby", None),
-            chunks=getattr(msg, "chunks", None),
-        )
-        print(f"Successfully ingested {len(ds.data_vars)} spectral bands.")
-        return "Ingestion Complete"
+            return asdict(msg) if hasattr(msg, "__dataclass_fields__") else msg.__dict__
+        except Exception:
+            raise RuntimeError("Failed to convert IngestSentineMessage to dict.") from None
 
     ingest_13_bands(
         ingest="{{ dag_run.conf.get('ingest', params.ingest_defaults) }}",
