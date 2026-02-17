@@ -6,12 +6,12 @@ from airflow.operators.bash import BashOperator
 from airflow.decorators import task, dag
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from sqlalchemy.orm import sessionmaker
-from airflow.sdk import Asset
+from airflow.sdk import Asset, AssetWatcher
 
-
+channels = ["modelrun", "repository", "issue", "issuecomment", "timeline_event"]
 redis_trigger = MessageQueueTrigger(
     scheme="redis+pubsub", 
-    channels=["modelrun", "repository", "issue", "issuecomment", "timeline_event"], 
+    channels=["modelrun"], 
     redis_conn_id="critical_redis"
 )
 
