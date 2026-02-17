@@ -10,8 +10,8 @@ from airflow.providers.postgres.hooks.postgres import PostgresHook
 from sqlalchemy.orm import sessionmaker
 from airflow.sdk import Asset, AssetWatcher
 
-channels = "modelrun" ["modelrun", "repository", "issue", "issuecomment", "timeline_event"]
-redis_trigger = MessageQueueTrigger(scheme="redis+pubsub", channels=[channels], 
+channels = ["modelrun", "repository", "issue", "issuecomment", "timeline_event"]
+redis_trigger = MessageQueueTrigger(scheme="redis+pubsub", channels=channels, 
     redis_conn_id="critical_redis"
 )
 
