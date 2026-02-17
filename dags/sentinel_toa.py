@@ -72,7 +72,7 @@ def sentinel2_l1c_ingestion() -> None:
             "--extra-index-url",
             "https://pkgs.dev.azure.com/wizardcontroller/MetOffice/_packaging/public/pypi/simple/",
         ],
-        system_site_packages=False,
+        system_site_packages=True,
     )
     def ingest_13_bands(ingest: dict[str, Any]) -> str:
         """Run ingestion inside a task-scoped virtualenv."""
