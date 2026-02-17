@@ -1,15 +1,13 @@
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
+from airflow.providers.common.messaging.triggers.msg_queue import MessageQueueTrigger
 from airflow.operators.bash import BashOperator
 from airflow.decorators import task, dag
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from sqlalchemy.orm import sessionmaker
 from airflow.sdk import Asset
 
-from horseless_repotracker.repotracker.github_api import GitHubAPI
-from horseless_repotracker.repotracker.github_timeline_api import GitHubTimelineAPI
-from horseless_repotracker.repotracker.sqlalchemy_model import User
 
 redis_trigger = MessageQueueTrigger(
     scheme="redis+pubsub", 
@@ -60,6 +58,11 @@ def github_ingester():
         ],
     )
     def insert_user_with_orm():
+        
+        from horseless_repotracker.repotracker.github_api import GitHubAPI
+        from horseless_repotracker.repotracker.github_timeline_api import GitHubTimelineAPI
+        from horseless_repotracker.repotracker.sqlalchemy_model import User
+        
         # 1. Initialize the hook with your UI Connection ID
         pg_hook = PostgresHook(postgres_conn_id='horseless_repotrackerdb')
         
