@@ -1,5 +1,10 @@
 # --index-url https://pypi.org/simple  
 --extra-index-url https://pkgs.dev.azure.com/wizardcontroller/MetOffice/_packaging/public/pypi/simple/
+--extra-index-url https://pypi.nvidia.com
+--extra-index-url https://download.pytorch.org/whl/cu130
+
+horseless-repotracker
+
 twine 
 keyring 
 artifacts-keyring
