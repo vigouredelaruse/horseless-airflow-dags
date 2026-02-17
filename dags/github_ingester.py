@@ -87,3 +87,5 @@ def github_ingester():
             raise
         finally:
             session.close()
+
+github_ingester()
