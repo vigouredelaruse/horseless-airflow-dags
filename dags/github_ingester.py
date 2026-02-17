@@ -5,7 +5,6 @@ from airflow.operators.bash import BashOperator
 from airflow.decorators import task, dag
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from sqlalchemy.orm import sessionmaker
-from common.airflow.assets import PostgresTable
 from airflow.sdk import Asset
 
 from horseless_repotracker.repotracker.github_api import GitHubAPI
@@ -52,9 +51,8 @@ def github_ingester():
         requirements=[
             "sqlalchemy",
             "psycopg2-binary",
-            "horseless-repotracker",
-            "common-airflow",
-            "airflow-sdk"
+            "horseless-repotracker", 
+            "apache-airflow-task-sdk"
         ],
         pip_install_options=[
             "--extra-index-url",
