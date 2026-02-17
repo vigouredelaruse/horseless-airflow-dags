@@ -11,7 +11,7 @@ from sqlalchemy.orm import sessionmaker
 from airflow.sdk import Asset, AssetWatcher
 
 channels = ["modelrun", "repository", "issue", "issuecomment", "timeline_event"]
-redis_trigger = MessageQueueTrigger(scheme="redis+pubsub", channels=["modelrun"], queue="github_ingester",
+redis_trigger = MessageQueueTrigger(scheme="redis+pubsub", channels=["modelrun"], 
     redis_conn_id="critical_redis"
 )
 
@@ -50,6 +50,8 @@ def github_ingester():
             "sqlalchemy",
             "psycopg2-binary",
             "horseless-repotracker", 
+            "apache-airflow-providers-common-messaging",
+            "apache-airflow-providers-redis",
             "apache-airflow-task-sdk"
         ],
         pip_install_options=[
