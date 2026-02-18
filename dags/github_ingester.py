@@ -46,13 +46,8 @@ def github_ingester():
     
     @task.virtualenv(
         task_id="ingest_github_data", 
-        requirements=[
-            "sqlalchemy",
-            "psycopg2-binary",
-            "horseless-repotracker", 
-            "apache-airflow-providers-common-messaging",
-            "apache-airflow-providers-redis",
-            "apache-airflow-task-sdk"
+        requirements=[ 
+            "horseless-repotracker" 
         ],
         pip_install_options=[
             "--extra-index-url",
