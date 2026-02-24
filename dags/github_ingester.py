@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from airflow.decorators import task, dag
 from airflow.providers.common.messaging.triggers.msg_queue import MessageQueueTrigger
-from airflow.sdk import Asset, AssetWatcher
+from airflow.sdk import Asset, AssetWatcher, dag, task
 
 # ---------------------------------------------------------------------------
 # Assets and triggers
@@ -83,6 +82,12 @@ def github_ingester():
       into a :class:`ModelRunDTO` and persists the three-layer entity chain:
       ``ModelRun`` → ``ModelRunParameter`` → ``SpectralConfig``.  Returns
       the newly created ``model_run_id`` for use by downstream tasks.
+
+    * **ingest_repositories** — ``@task.virtualenv`` that accepts the
+      ``model_run_id`` produced by ``persist_model_run``, loads the
+      corresponding :class:`ModelRunParameter`, then streams each repository
+      in ``params.repos`` through the GitHub API and runs
+      :class:`IssueIngestor` for each one, persisting all resulting entities.
     """
 
     @task(task_id="extract_dto_json")
@@ -252,11 +257,116 @@ def github_ingester():
 
         return asyncio.run(_persist())
 
+    @task.virtualenv(
+        task_id="ingest_repositories",
+        requirements=_VENV_REQUIREMENTS,
+        pip_install_options=_VENV_PIP_OPTIONS,
+        system_site_packages=True,
+    )
+    def ingest_repositories(model_run_id: int) -> list:
+        """Stream repositories from the ModelRunParameter and ingest issues.
+
+        For each ``owner/repo`` string in :attr:`ModelRunParameter.repos`:
+
+        1. Fetches authoritative repository metadata from the GitHub REST API
+           (``GET /repos/{owner}/{repo}``) and upserts a :class:`Repository`
+           row via :class:`RepositoryORM`.
+        2. Streams :class:`IssueFetchResult` objects from
+           :class:`IssueIngestor` and persists each ``User``, ``Label``,
+           and ``Issue`` row via PostgreSQL ``ON CONFLICT DO UPDATE``
+           upserts.
+
+        Args:
+            model_run_id: The ``model_run.id`` returned by ``persist_model_run``.
+
+        Returns:
+            List of fully-qualified repository names that were successfully
+            ingested (``["owner/repo", ...]``).
+        """
+        import asyncio
+        import logging
+        import os
+
+        import aiohttp
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+        from horseless_repotracker.repotracker.github_api import GitHubAPI
+        from horseless_repotracker.repotracker.ingestion import IssueIngestor
+        from horseless_repotracker.repotracker.orm import ModelRunParameterORM, RepositoryORM
+        from horseless_repotracker.repotracker.persistence_sqlalchemy import PersistenceSQLAlchemy
+        from horseless_repotracker.repotracker.sqlalchemy_model import Issue, Label, Repository, User
+
+        logger = logging.getLogger(__name__)
+
+        async def _stream_repositories(repos, token, sf, model_run_id):
+            """Yield a persisted :class:`Repository` ORM for each owner/repo string."""
+            repo_orm_helper = RepositoryORM(sf)
+            api = GitHubAPI(token=token)
+            async with aiohttp.ClientSession() as session:
+                for repo_full_name in repos:
+                    owner, repo_name = repo_full_name.strip().split("/", 1)
+                    details = await api.get_repository_details(session, owner, repo_name)
+                    github_id = details.get("id")
+                    if github_id is None:
+                        raise ValueError(
+                            f"GitHub API returned no numeric id for {repo_full_name!r}"
+                        )
+                    repo = Repository(
+                        github_id=github_id,
+                        model_run_id=model_run_id,
+                        name=details.get("name", repo_name),
+                        full_name=details.get("full_name", repo_full_name),
+                        html_url=details.get("html_url"),
+                        url=details.get("url"),
+                        description=details.get("description"),
+                        private=details.get("private"),
+                        fork=details.get("fork"),
+                        default_branch=details.get("default_branch"),
+                        stargazers_count=details.get("stargazers_count"),
+                        open_issues_count=details.get("open_issues_count"),
+                        owner_type=details.get("owner", {}).get("type"),
+                        owner_id=details.get("owner", {}).get("id"),
+                    )
+                    await repo_orm_helper.upsert(repo)
+                    logger.info("Upserted repository %s (github_id=%s)", repo_full_name, github_id)
+                    yield repo
+
+        async def _ingest() -> list:
+            url = PersistenceSQLAlchemy.get_async_postgres_db_url()
+            engine = create_async_engine(url, echo=False)
+            sf = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+
+            try:
+                param_orm = ModelRunParameterORM(sf)
+                params = await param_orm.get_by_model_run(model_run_id)
+                if params is None:
+                    raise ValueError(
+                        f"No ModelRunParameter found for model_run_id={model_run_id}"
+                    )
+
+                token: str = params.token or os.environ.get("GITHUB_TOKEN", "")
+                repos: list = params.repos if isinstance(params.repos, list) else list(params.repos)
+
+                ingestor = IssueIngestor(github_token=token)
+                ingested: list = []
+
+                async for repository in _stream_repositories(repos, token, sf, model_run_id): 
+                    ingested.append(repository)
+
+                return ingested
+
+            finally:
+                await engine.dispose()
+
+        return asyncio.run(_ingest())
+
     # -----------------------------------------------------------------------
     # Task chain
     # -----------------------------------------------------------------------
     dto_json = extract_dto_json()
-    persist_model_run(dto_json)
+    model_run_id = persist_model_run(dto_json)
+    ingest_repositories(model_run_id)
 
 
 github_ingester()
