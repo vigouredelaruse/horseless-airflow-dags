@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 from airflow.providers.common.messaging.triggers.msg_queue import MessageQueueTrigger
-from airflow.sdk import Asset, AssetWatcher, dag, task
+from airflow.sdk import Asset, AssetWatcher, Variable, dag, task
 
 # ---------------------------------------------------------------------------
 # Assets and triggers
@@ -51,41 +51,43 @@ _VENV_PIP_OPTIONS = [
 # Environment variables forwarded to every @task.virtualenv subprocess.
 # Airflow Variables are NOT automatically injected into virtualenv subprocesses
 # — the child process only inherits OS-level env vars from the worker process.
-# Jinja templates here are resolved by Airflow at task-execution time and
-# written into the subprocess environment before the Python function runs.
+# Variable.get() is evaluated at DAG parse time and writes the resolved value
+# into the subprocess environment.  Jinja {{ var.value.X }} is NOT used here
+# because env_vars is not a template_field on PythonVirtualenvOperator in
+# Airflow 3.x and would be forwarded as a literal string.
 # ---------------------------------------------------------------------------
 _VENV_ENV_VARS = {
     # PostgreSQL connection
-    "PG_HOST":     "{{ var.value.PG_HOST }}",
-    "PG_PORT":     "{{ var.value.PG_PORT }}",
-    "PG_DBNAME":   "{{ var.value.PG_DBNAME }}",
-    "PG_USER":     "{{ var.value.PG_USER }}",
-    "PG_PASSWORD": "{{ var.value.PG_PASSWORD }}",
-    "DB_ENABLED":  "{{ var.value.DB_ENABLED }}",
-    # GitHub HTTP transport
-    "GITHUB_TOKEN":                      "{{ var.value.GITHUB_TOKEN }}",
-    "GITHUB_TOKEN_SECHELE":              "{{ var.value.GITHUB_TOKEN_SECHELE }}",
-    "GITHUB_CORE_RATE_LIMIT_RPS":        "{{ var.value.GITHUB_CORE_RATE_LIMIT_RPS }}",
-    "GITHUB_SEARCH_RATE_LIMIT_RPS":      "{{ var.value.GITHUB_SEARCH_RATE_LIMIT_RPS }}",
-    "GITHUB_CONCURRENCY":                "{{ var.value.GITHUB_CONCURRENCY }}",
-    "GITHUB_MAX_RETRIES":                "{{ var.value.GITHUB_MAX_RETRIES }}",
-    "GITHUB_BACKOFF_MIN_SECONDS":        "{{ var.value.GITHUB_BACKOFF_MIN_SECONDS }}",
-    "GITHUB_BACKOFF_MAX_SECONDS":        "{{ var.value.GITHUB_BACKOFF_MAX_SECONDS }}",
-    "GITHUB_BACKOFF_JITTER_SECONDS":     "{{ var.value.GITHUB_BACKOFF_JITTER_SECONDS }}",
-    "GITHUB_REQUEST_TIMEOUT_SECONDS":    "{{ var.value.GITHUB_REQUEST_TIMEOUT_SECONDS }}",
-    "GITHUB_REQUEST_SPACING_SECONDS":    "{{ var.value.GITHUB_REQUEST_SPACING_SECONDS }}",
-    "GITHUB_WORKER_START_STAGGER_SECONDS": "{{ var.value.GITHUB_WORKER_START_STAGGER_SECONDS }}",
-    # ML / embedding
-    "EMBEDDING_MODEL": "{{ var.value.EMBEDDING_MODEL }}",
-    "EMBEDDING_DIMS":  "{{ var.value.EMBEDDING_DIMS }}",
-    "HF_TOKEN":        "{{ var.value.HF_TOKEN }}",
+    "PG_HOST":     Variable.get("PG_HOST",     default_var="picok8s.dubridge.ataxlab.com"),
+    "PG_PORT":     Variable.get("PG_PORT",     default_var="32432"),
+    "PG_DBNAME":   Variable.get("PG_DBNAME",   default_var="horseless_repotracker_tests"),
+    "PG_USER":     Variable.get("PG_USER",     default_var="postgres"),
+    "PG_PASSWORD": Variable.get("PG_PASSWORD", default_var="postgres"),
+    "DB_ENABLED":  Variable.get("DB_ENABLED",  default_var="true"),
+    # GitHub HTTP transport — tokens have no default (intentionally omitted)
+    "GITHUB_TOKEN":                        Variable.get("GITHUB_TOKEN"),
+    "GITHUB_TOKEN_SECHELE":                Variable.get("GITHUB_TOKEN_SECHELE"),
+    "GITHUB_CORE_RATE_LIMIT_RPS":          Variable.get("GITHUB_CORE_RATE_LIMIT_RPS",          default_var="4"),
+    "GITHUB_SEARCH_RATE_LIMIT_RPS":        Variable.get("GITHUB_SEARCH_RATE_LIMIT_RPS",        default_var="4"),
+    "GITHUB_CONCURRENCY":                  Variable.get("GITHUB_CONCURRENCY",                  default_var="4"),
+    "GITHUB_MAX_RETRIES":                  Variable.get("GITHUB_MAX_RETRIES",                  default_var="6"),
+    "GITHUB_BACKOFF_MIN_SECONDS":          Variable.get("GITHUB_BACKOFF_MIN_SECONDS",          default_var="10"),
+    "GITHUB_BACKOFF_MAX_SECONDS":          Variable.get("GITHUB_BACKOFF_MAX_SECONDS",          default_var="120"),
+    "GITHUB_BACKOFF_JITTER_SECONDS":       Variable.get("GITHUB_BACKOFF_JITTER_SECONDS",       default_var=".5"),
+    "GITHUB_REQUEST_TIMEOUT_SECONDS":      Variable.get("GITHUB_REQUEST_TIMEOUT_SECONDS",      default_var="30"),
+    "GITHUB_REQUEST_SPACING_SECONDS":      Variable.get("GITHUB_REQUEST_SPACING_SECONDS",      default_var="0"),
+    "GITHUB_WORKER_START_STAGGER_SECONDS": Variable.get("GITHUB_WORKER_START_STAGGER_SECONDS", default_var="1"),
+    # ML / embedding — HF_TOKEN has no default (intentionally omitted)
+    "EMBEDDING_MODEL": Variable.get("EMBEDDING_MODEL", default_var="all-MiniLM-L6-v2"),
+    "EMBEDDING_DIMS":  Variable.get("EMBEDDING_DIMS",  default_var="384"),
+    "HF_TOKEN":        Variable.get("HF_TOKEN"),
     # Threading / parallelism
-    "OMP_NUM_THREADS":          "{{ var.value.OMP_NUM_THREADS }}",
-    "MKL_NUM_THREADS":          "{{ var.value.MKL_NUM_THREADS }}",
-    "OPENBLAS_NUM_THREADS":     "{{ var.value.OPENBLAS_NUM_THREADS }}",
-    "NUMEXPR_NUM_THREADS":      "{{ var.value.NUMEXPR_NUM_THREADS }}",
-    "PYTORCH_NUM_THREADS":      "{{ var.value.PYTORCH_NUM_THREADS }}",
-    "TOKENIZERS_PARALLELISM":   "{{ var.value.TOKENIZERS_PARALLELISM }}",
+    "OMP_NUM_THREADS":          Variable.get("OMP_NUM_THREADS",        default_var="4"),
+    "MKL_NUM_THREADS":          Variable.get("MKL_NUM_THREADS",        default_var="4"),
+    "OPENBLAS_NUM_THREADS":     Variable.get("OPENBLAS_NUM_THREADS",   default_var="4"),
+    "NUMEXPR_NUM_THREADS":      Variable.get("NUMEXPR_NUM_THREADS",    default_var="4"),
+    "PYTORCH_NUM_THREADS":      Variable.get("PYTORCH_NUM_THREADS",    default_var="4"),
+    "TOKENIZERS_PARALLELISM":   Variable.get("TOKENIZERS_PARALLELISM", default_var="false"),
 }
 
 
