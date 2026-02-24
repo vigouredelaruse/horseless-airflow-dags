@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import os
-
 from airflow.providers.common.messaging.triggers.msg_queue import MessageQueueTrigger
 from airflow.sdk import Asset, AssetWatcher, Variable, dag, task
 from horseless_dag_env import DEFAULT_ARGS, VENV_REQUIREMENTS, VENV_PIP_OPTIONS, build_venv_env_vars
@@ -12,8 +10,8 @@ from horseless_dag_env import DEFAULT_ARGS, VENV_REQUIREMENTS, VENV_PIP_OPTIONS,
 
 # The model_run channel carries serialised ModelRunDTO JSON strings published
 # by RedisTransport.publish_model_run_dto() on the producer side.
-# Channel name is read from the OS env var set in Airflow deployment config.
-_MODELRUN_CHANNEL = os.environ.get("REDIS_PUBSUB_MODELRUN_CHANNEL", "modelrun")
+# Channel name is read from the Airflow Variables KV store (key: REDIS_PUBSUB_MODELRUN_CHANNEL).
+_MODELRUN_CHANNEL = Variable.get("REDIS_PUBSUB_MODELRUN_CHANNEL", default="modelrun")
 
 model_run_trigger = MessageQueueTrigger(
     scheme="redis+pubsub",

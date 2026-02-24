@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import os
-
 from airflow.providers.common.messaging.triggers.msg_queue import MessageQueueTrigger
 from airflow.sdk import Asset, AssetWatcher, Variable, dag, task
 from horseless_dag_env import DEFAULT_ARGS, VENV_REQUIREMENTS, VENV_PIP_OPTIONS, build_venv_env_vars
@@ -12,9 +10,10 @@ from horseless_dag_env import DEFAULT_ARGS, VENV_REQUIREMENTS, VENV_PIP_OPTIONS,
 
 # The schema_reset channel carries serialised SchemaOperationsMessage JSON
 # strings published by any producer that wants a destructive schema reset.
-# Channel name is read from the OS env var set in Airflow deployment config;
-# defaults to "schema_reset" to match RedisTransport._SCHEMA_RESET_CHANNEL.
-_SCHEMA_RESET_CHANNEL = os.environ.get("REDIS_PUBSUB_SCHEMAOPS_RESET_CHANNEL", "schema_reset")
+# Channel name is read from the Airflow Variables KV store
+# (key: REDIS_PUBSUB_SCHEMAOPS_RESET_CHANNEL); defaults to "schema_reset" to
+# match RedisTransport._SCHEMA_RESET_CHANNEL.
+_SCHEMA_RESET_CHANNEL = Variable.get("REDIS_PUBSUB_SCHEMAOPS_RESET_CHANNEL", default="schema_reset")
 
 schema_reset_trigger = MessageQueueTrigger(
     scheme="redis+pubsub",

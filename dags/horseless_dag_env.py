@@ -26,7 +26,6 @@ Usage in a DAG::
 """
 from __future__ import annotations
 
-import os
 from datetime import timedelta
 
 from airflow.sdk import Variable
@@ -62,24 +61,20 @@ VENV_PIP_OPTIONS: list[str] = [
 def build_venv_env_vars(*, include_redis: bool = False) -> dict[str, str]:
     """Build the env-var dict forwarded to every ``@task.virtualenv`` subprocess.
 
-    ``Variable.get()`` is called at **DAG parse time**.  ``env_vars`` is NOT
-    in ``template_fields`` on ``PythonVirtualenvOperator`` in Airflow 3.x, so
-    Jinja ``{{ var.value.X }}`` strings would be forwarded as literal strings
-    to the subprocess.  Resolving here guarantees the subprocess receives the
-    actual values.
+    All values are resolved by ``Variable.get()`` at **DAG parse time** from
+    the Airflow Variables KV store.  ``env_vars`` is NOT in ``template_fields``
+    on ``PythonVirtualenvOperator`` in Airflow 3.x, so Jinja
+    ``{{ var.value.X }}`` strings would be forwarded as literal strings to the
+    subprocess.  Resolving here guarantees the subprocess receives the actual
+    values stored in the Airflow Variables UI / API.
 
     Tokens (``GITHUB_TOKEN``, ``GITHUB_TOKEN_SECHELE``, ``HF_TOKEN``) are
-    intentionally left without a ``default=`` so that missing configuration
-    fails loudly at parse time rather than silently running with an empty
-    token.
+    called without ``default=`` so that a missing KV entry raises ``KeyError``
+    at parse time rather than silently running with an empty token.
 
     Args:
-        include_redis: When ``True``, include the four Redis Pub/Sub transport
-            variables (``REDIS_PUBSUB_HOST``, ``REDIS_PUBSUB_PORT``,
-            ``REDIS_PUBLISH_USERNAME``, ``REDIS_PUBLISH_PASSWORD``).  These are
-            only required by DAGs that call
-            :meth:`RedisTransport.publish_schema_reset` or similar transport
-            methods from within a virtualenv task.
+        include_redis: When ``True``, include Redis Pub/Sub transport variables.
+            These must be present in the Airflow Variables KV store.
 
     Returns:
         A ``dict[str, str]`` suitable for passing directly to
@@ -93,7 +88,7 @@ def build_venv_env_vars(*, include_redis: bool = False) -> dict[str, str]:
         "PG_USER":     Variable.get("PG_USER",     default="postgres"),
         "PG_PASSWORD": Variable.get("PG_PASSWORD", default="postgres"),
         "DB_ENABLED":  Variable.get("DB_ENABLED",  default="true"),
-        # GitHub HTTP transport — tokens have no default (intentionally omitted)
+        # GitHub HTTP transport — tokens have no default (fail loudly if absent)
         "GITHUB_TOKEN":                        Variable.get("GITHUB_TOKEN"),
         "GITHUB_TOKEN_SECHELE":                Variable.get("GITHUB_TOKEN_SECHELE"),
         "GITHUB_CORE_RATE_LIMIT_RPS":          Variable.get("GITHUB_CORE_RATE_LIMIT_RPS",          default="4"),
@@ -106,7 +101,7 @@ def build_venv_env_vars(*, include_redis: bool = False) -> dict[str, str]:
         "GITHUB_REQUEST_TIMEOUT_SECONDS":      Variable.get("GITHUB_REQUEST_TIMEOUT_SECONDS",      default="30"),
         "GITHUB_REQUEST_SPACING_SECONDS":      Variable.get("GITHUB_REQUEST_SPACING_SECONDS",      default="0"),
         "GITHUB_WORKER_START_STAGGER_SECONDS": Variable.get("GITHUB_WORKER_START_STAGGER_SECONDS", default="1"),
-        # ML / embedding — HF_TOKEN has no default (intentionally omitted)
+        # ML / embedding — HF_TOKEN has no default (fail loudly if absent)
         "EMBEDDING_MODEL": Variable.get("EMBEDDING_MODEL", default="all-MiniLM-L6-v2"),
         "EMBEDDING_DIMS":  Variable.get("EMBEDDING_DIMS",  default="384"),
         "HF_TOKEN":        Variable.get("HF_TOKEN"),
@@ -120,17 +115,14 @@ def build_venv_env_vars(*, include_redis: bool = False) -> dict[str, str]:
     }
 
     if include_redis:
-        # Redis vars are set as OS-level env vars in the Airflow deployment config,
-        # NOT in the Airflow Variables KV store.  Using os.environ.get() avoids
-        # spurious ERROR log lines from Variable.get() hitting the API and finding
-        # no key before falling back to a default.
         env_vars.update({
-            "REDIS_PUBSUB_HOST":                 os.environ.get("REDIS_PUBSUB_HOST",                 "localhost"),
-            "REDIS_PUBSUB_PORT":                 os.environ.get("REDIS_PUBSUB_PORT",                 "6379"),
-            "REDIS_PUBLISH_USERNAME":            os.environ.get("REDIS_PUBLISH_USERNAME",            ""),
-            "REDIS_PUBLISH_PASSWORD":            os.environ.get("REDIS_PUBLISH_PASSWORD",            ""),
-            "REDIS_PUBSUB_MODELRUN_CHANNEL":      os.environ.get("REDIS_PUBSUB_MODELRUN_CHANNEL",      "modelrun"),
-            "REDIS_PUBSUB_SCHEMAOPS_RESET_CHANNEL": os.environ.get("REDIS_PUBSUB_SCHEMAOPS_RESET_CHANNEL", "schema_reset"),
+            # Redis Pub/Sub transport — must be set in the Airflow Variables KV store.
+            "REDIS_PUBSUB_HOST":                     Variable.get("REDIS_PUBSUB_HOST",                     default="localhost"),
+            "REDIS_PUBSUB_PORT":                     Variable.get("REDIS_PUBSUB_PORT",                     default="6379"),
+            "REDIS_PUBLISH_USERNAME":                Variable.get("REDIS_PUBLISH_USERNAME",                default=""),
+            "REDIS_PUBLISH_PASSWORD":                Variable.get("REDIS_PUBLISH_PASSWORD",                default=""),
+            "REDIS_PUBSUB_MODELRUN_CHANNEL":          Variable.get("REDIS_PUBSUB_MODELRUN_CHANNEL",          default="modelrun"),
+            "REDIS_PUBSUB_SCHEMAOPS_RESET_CHANNEL":  Variable.get("REDIS_PUBSUB_SCHEMAOPS_RESET_CHANNEL",  default="schema_reset"),
         })
 
     return env_vars
