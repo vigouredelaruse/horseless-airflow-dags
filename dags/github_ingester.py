@@ -117,16 +117,22 @@ def github_ingester():
                 f"Available keys: {list(triggering_events.keys())}"
             )
 
-        # The MessageQueueTrigger for redis+pubsub places the raw message in
-        # extra["message"].  Fail fast if the key is absent so the error is
-        # visible at the extraction step rather than downstream.
+        # The MessageQueueTrigger for redis+pubsub wraps the full Redis
+        # pub/sub envelope as extra["payload"].  The actual serialised
+        # ModelRunDTO string is at extra["payload"]["data"], matching the
+        # validated wire format:
+        #   { "payload": { "type": "message", "channel": "modelrun",
+        #                  "data": "{...ModelRunDTO JSON...}" } }
         latest_event = model_run_events[-1]
         extra: dict = getattr(latest_event, "extra", {}) or {}
-        if "message" not in extra:
+        payload: dict = extra.get("payload", {})
+        if "data" not in payload:
             raise ValueError(
-                f"Expected 'message' key in asset event extra. Got: {list(extra.keys())}"
+                f"Expected 'payload.data' in asset event extra. "
+                f"Got extra keys: {list(extra.keys())}, "
+                f"payload keys: {list(payload.keys())}"
             )
-        return extra["message"]
+        return payload["data"]
 
     @task.virtualenv(
         task_id="persist_model_run",
