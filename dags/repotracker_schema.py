@@ -92,7 +92,7 @@ _VENV_ENV_VARS = {
 # ---------------------------------------------------------------------------
 
 @dag(
-    dag_id="repotracker_schema_reset",
+    dag_id="repotracker_schema_reset_handler",
     default_args=default_args,
     description=(
         "Destructively reset the Repotracker schema for a named database, "
