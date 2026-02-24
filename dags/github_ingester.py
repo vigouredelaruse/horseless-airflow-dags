@@ -23,6 +23,7 @@ model_run_asset = Asset(
     watchers=[AssetWatcher(name="redis_watcher", trigger=model_run_trigger)],
 )
 
+
 # ---------------------------------------------------------------------------
 # Default task arguments
 # ---------------------------------------------------------------------------
