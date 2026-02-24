@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from datetime import timedelta
-
 from airflow.providers.common.messaging.triggers.msg_queue import MessageQueueTrigger
 from airflow.sdk import Asset, AssetWatcher, Variable, dag, task
+from horseless_dag_env import DEFAULT_ARGS, VENV_REQUIREMENTS, VENV_PIP_OPTIONS, build_venv_env_vars
 
 # ---------------------------------------------------------------------------
 # Assets and triggers
@@ -25,71 +24,13 @@ model_run_asset = Asset(
 
 
 # ---------------------------------------------------------------------------
-# Default task arguments
+# Shared constants — defined in horseless_dag_env.py (ignored by DAG scanner)
 # ---------------------------------------------------------------------------
 
-default_args = {
-    "owner": "airflow",
-    "depends_on_past": False,
-    "email_on_failure": False,
-    "email_on_retry": False,
-    "retries": 1,
-    "retry_delay": timedelta(minutes=5),
-}
-
-# ---------------------------------------------------------------------------
-# Shared virtualenv spec — both tasks use the same horseless-repotracker
-# package resolved from the internal PyPI index.
-# ---------------------------------------------------------------------------
-
-_VENV_REQUIREMENTS = ["horseless-repotracker"]
-_VENV_PIP_OPTIONS = [
-    "--extra-index-url",
-    "https://pkgs.dev.azure.com/wizardcontroller/MetOffice/_packaging/public/pypi/simple/",
-]
-
-# ---------------------------------------------------------------------------
-# Environment variables forwarded to every @task.virtualenv subprocess.
-# Airflow Variables are NOT automatically injected into virtualenv subprocesses
-# — the child process only inherits OS-level env vars from the worker process.
-# Variable.get() is evaluated at DAG parse time and writes the resolved value
-# into the subprocess environment.  Jinja {{ var.value.X }} is NOT used here
-# because env_vars is not a template_field on PythonVirtualenvOperator in
-# Airflow 3.x and would be forwarded as a literal string.
-# ---------------------------------------------------------------------------
-_VENV_ENV_VARS = {
-    # PostgreSQL connection
-    "PG_HOST":     Variable.get("PG_HOST",     default_var="picok8s.dubridge.ataxlab.com"),
-    "PG_PORT":     Variable.get("PG_PORT",     default_var="32432"),
-    "PG_DBNAME":   Variable.get("PG_DBNAME",   default_var="horseless_repotracker_tests"),
-    "PG_USER":     Variable.get("PG_USER",     default_var="postgres"),
-    "PG_PASSWORD": Variable.get("PG_PASSWORD", default_var="postgres"),
-    "DB_ENABLED":  Variable.get("DB_ENABLED",  default_var="true"),
-    # GitHub HTTP transport — tokens have no default (intentionally omitted)
-    "GITHUB_TOKEN":                        Variable.get("GITHUB_TOKEN"),
-    "GITHUB_TOKEN_SECHELE":                Variable.get("GITHUB_TOKEN_SECHELE"),
-    "GITHUB_CORE_RATE_LIMIT_RPS":          Variable.get("GITHUB_CORE_RATE_LIMIT_RPS",          default_var="4"),
-    "GITHUB_SEARCH_RATE_LIMIT_RPS":        Variable.get("GITHUB_SEARCH_RATE_LIMIT_RPS",        default_var="4"),
-    "GITHUB_CONCURRENCY":                  Variable.get("GITHUB_CONCURRENCY",                  default_var="4"),
-    "GITHUB_MAX_RETRIES":                  Variable.get("GITHUB_MAX_RETRIES",                  default_var="6"),
-    "GITHUB_BACKOFF_MIN_SECONDS":          Variable.get("GITHUB_BACKOFF_MIN_SECONDS",          default_var="10"),
-    "GITHUB_BACKOFF_MAX_SECONDS":          Variable.get("GITHUB_BACKOFF_MAX_SECONDS",          default_var="120"),
-    "GITHUB_BACKOFF_JITTER_SECONDS":       Variable.get("GITHUB_BACKOFF_JITTER_SECONDS",       default_var=".5"),
-    "GITHUB_REQUEST_TIMEOUT_SECONDS":      Variable.get("GITHUB_REQUEST_TIMEOUT_SECONDS",      default_var="30"),
-    "GITHUB_REQUEST_SPACING_SECONDS":      Variable.get("GITHUB_REQUEST_SPACING_SECONDS",      default_var="0"),
-    "GITHUB_WORKER_START_STAGGER_SECONDS": Variable.get("GITHUB_WORKER_START_STAGGER_SECONDS", default_var="1"),
-    # ML / embedding — HF_TOKEN has no default (intentionally omitted)
-    "EMBEDDING_MODEL": Variable.get("EMBEDDING_MODEL", default_var="all-MiniLM-L6-v2"),
-    "EMBEDDING_DIMS":  Variable.get("EMBEDDING_DIMS",  default_var="384"),
-    "HF_TOKEN":        Variable.get("HF_TOKEN"),
-    # Threading / parallelism
-    "OMP_NUM_THREADS":          Variable.get("OMP_NUM_THREADS",        default_var="4"),
-    "MKL_NUM_THREADS":          Variable.get("MKL_NUM_THREADS",        default_var="4"),
-    "OPENBLAS_NUM_THREADS":     Variable.get("OPENBLAS_NUM_THREADS",   default_var="4"),
-    "NUMEXPR_NUM_THREADS":      Variable.get("NUMEXPR_NUM_THREADS",    default_var="4"),
-    "PYTORCH_NUM_THREADS":      Variable.get("PYTORCH_NUM_THREADS",    default_var="4"),
-    "TOKENIZERS_PARALLELISM":   Variable.get("TOKENIZERS_PARALLELISM", default_var="false"),
-}
+default_args       = DEFAULT_ARGS
+_VENV_REQUIREMENTS = VENV_REQUIREMENTS
+_VENV_PIP_OPTIONS  = VENV_PIP_OPTIONS
+_VENV_ENV_VARS     = build_venv_env_vars()
 
 
 # ---------------------------------------------------------------------------

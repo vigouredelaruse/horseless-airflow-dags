@@ -1,0 +1,5 @@
+# Files listed here are excluded from Airflow's DAG scanner but remain
+# importable by DAG files (the dags/ folder is on sys.path for all Airflow
+# components).  Use this to store shared utility modules safely alongside DAGs
+# without triggering "no DAGs found" warnings or import errors.
+horseless_dag_env.py
