@@ -47,6 +47,47 @@ _VENV_PIP_OPTIONS = [
     "https://pkgs.dev.azure.com/wizardcontroller/MetOffice/_packaging/public/pypi/simple/",
 ]
 
+# ---------------------------------------------------------------------------
+# Environment variables forwarded to every @task.virtualenv subprocess.
+# Airflow Variables are NOT automatically injected into virtualenv subprocesses
+# — the child process only inherits OS-level env vars from the worker process.
+# Jinja templates here are resolved by Airflow at task-execution time and
+# written into the subprocess environment before the Python function runs.
+# ---------------------------------------------------------------------------
+_VENV_ENV_VARS = {
+    # PostgreSQL connection
+    "PG_HOST":     "{{ var.value.PG_HOST }}",
+    "PG_PORT":     "{{ var.value.PG_PORT }}",
+    "PG_DBNAME":   "{{ var.value.PG_DBNAME }}",
+    "PG_USER":     "{{ var.value.PG_USER }}",
+    "PG_PASSWORD": "{{ var.value.PG_PASSWORD }}",
+    "DB_ENABLED":  "{{ var.value.DB_ENABLED }}",
+    # GitHub HTTP transport
+    "GITHUB_TOKEN":                      "{{ var.value.GITHUB_TOKEN }}",
+    "GITHUB_TOKEN_SECHELE":              "{{ var.value.GITHUB_TOKEN_SECHELE }}",
+    "GITHUB_CORE_RATE_LIMIT_RPS":        "{{ var.value.GITHUB_CORE_RATE_LIMIT_RPS }}",
+    "GITHUB_SEARCH_RATE_LIMIT_RPS":      "{{ var.value.GITHUB_SEARCH_RATE_LIMIT_RPS }}",
+    "GITHUB_CONCURRENCY":                "{{ var.value.GITHUB_CONCURRENCY }}",
+    "GITHUB_MAX_RETRIES":                "{{ var.value.GITHUB_MAX_RETRIES }}",
+    "GITHUB_BACKOFF_MIN_SECONDS":        "{{ var.value.GITHUB_BACKOFF_MIN_SECONDS }}",
+    "GITHUB_BACKOFF_MAX_SECONDS":        "{{ var.value.GITHUB_BACKOFF_MAX_SECONDS }}",
+    "GITHUB_BACKOFF_JITTER_SECONDS":     "{{ var.value.GITHUB_BACKOFF_JITTER_SECONDS }}",
+    "GITHUB_REQUEST_TIMEOUT_SECONDS":    "{{ var.value.GITHUB_REQUEST_TIMEOUT_SECONDS }}",
+    "GITHUB_REQUEST_SPACING_SECONDS":    "{{ var.value.GITHUB_REQUEST_SPACING_SECONDS }}",
+    "GITHUB_WORKER_START_STAGGER_SECONDS": "{{ var.value.GITHUB_WORKER_START_STAGGER_SECONDS }}",
+    # ML / embedding
+    "EMBEDDING_MODEL": "{{ var.value.EMBEDDING_MODEL }}",
+    "EMBEDDING_DIMS":  "{{ var.value.EMBEDDING_DIMS }}",
+    "HF_TOKEN":        "{{ var.value.HF_TOKEN }}",
+    # Threading / parallelism
+    "OMP_NUM_THREADS":          "{{ var.value.OMP_NUM_THREADS }}",
+    "MKL_NUM_THREADS":          "{{ var.value.MKL_NUM_THREADS }}",
+    "OPENBLAS_NUM_THREADS":     "{{ var.value.OPENBLAS_NUM_THREADS }}",
+    "NUMEXPR_NUM_THREADS":      "{{ var.value.NUMEXPR_NUM_THREADS }}",
+    "PYTORCH_NUM_THREADS":      "{{ var.value.PYTORCH_NUM_THREADS }}",
+    "TOKENIZERS_PARALLELISM":   "{{ var.value.TOKENIZERS_PARALLELISM }}",
+}
+
 
 # ---------------------------------------------------------------------------
 # DAG definition
@@ -144,6 +185,7 @@ def github_ingester():
         requirements=_VENV_REQUIREMENTS,
         pip_install_options=_VENV_PIP_OPTIONS,
         system_site_packages=True,
+        env_vars=_VENV_ENV_VARS,
     )
     def persist_model_run(dto_json: str) -> int:
         """Deserialise a ModelRunDTO JSON string and persist the entity chain.
@@ -262,6 +304,7 @@ def github_ingester():
         requirements=_VENV_REQUIREMENTS,
         pip_install_options=_VENV_PIP_OPTIONS,
         system_site_packages=True,
+        env_vars=_VENV_ENV_VARS,
     )
     def ingest_repositories(model_run_id: int) -> list:
         """Stream repositories from the ModelRunParameter and ingest issues.
