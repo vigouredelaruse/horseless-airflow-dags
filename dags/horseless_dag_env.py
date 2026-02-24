@@ -26,6 +26,7 @@ Usage in a DAG::
 """
 from __future__ import annotations
 
+import os
 from datetime import timedelta
 
 from airflow.sdk import Variable
@@ -119,12 +120,17 @@ def build_venv_env_vars(*, include_redis: bool = False) -> dict[str, str]:
     }
 
     if include_redis:
+        # Redis vars are set as OS-level env vars in the Airflow deployment config,
+        # NOT in the Airflow Variables KV store.  Using os.environ.get() avoids
+        # spurious ERROR log lines from Variable.get() hitting the API and finding
+        # no key before falling back to a default.
         env_vars.update({
-            # Redis Pub/Sub transport
-            "REDIS_PUBSUB_HOST":      Variable.get("REDIS_PUBSUB_HOST",      default="localhost"),
-            "REDIS_PUBSUB_PORT":      Variable.get("REDIS_PUBSUB_PORT",      default="6379"),
-            "REDIS_PUBLISH_USERNAME": Variable.get("REDIS_PUBLISH_USERNAME", default=""),
-            "REDIS_PUBLISH_PASSWORD": Variable.get("REDIS_PUBLISH_PASSWORD", default=""),
+            "REDIS_PUBSUB_HOST":                 os.environ.get("REDIS_PUBSUB_HOST",                 "localhost"),
+            "REDIS_PUBSUB_PORT":                 os.environ.get("REDIS_PUBSUB_PORT",                 "6379"),
+            "REDIS_PUBLISH_USERNAME":            os.environ.get("REDIS_PUBLISH_USERNAME",            ""),
+            "REDIS_PUBLISH_PASSWORD":            os.environ.get("REDIS_PUBLISH_PASSWORD",            ""),
+            "REDIS_PUBSUB_MODELRUN_CHANNEL":      os.environ.get("REDIS_PUBSUB_MODELRUN_CHANNEL",      "modelrun"),
+            "REDIS_PUBSUB_SCHEMAOPS_RESET_CHANNEL": os.environ.get("REDIS_PUBSUB_SCHEMAOPS_RESET_CHANNEL", "schema_reset"),
         })
 
     return env_vars

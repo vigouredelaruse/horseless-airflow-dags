@@ -63,7 +63,7 @@ def repotracker_schema_reset():
         conf: dict = context.get("dag_run").conf or {}
         database_name: str = (conf.get("database_name") or "").strip()
         if not database_name:
-            database_name = Variable.get("PG_DBNAME", default="horseless_repotracker_tests")
+            database_name = Variable.get("PG_DBNAME", default="horseless_repotracker")
         if not database_name:
             raise ValueError(
                 "database_name is required.  Pass it in dag_run.conf or set "
