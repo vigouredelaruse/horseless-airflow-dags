@@ -18,13 +18,13 @@ _SCHEMA_RESET_CHANNEL = Variable.get("REDIS_PUBSUB_SCHEMAOPS_RESET_CHANNEL", def
 schema_reset_trigger = MessageQueueTrigger(
     scheme="redis+pubsub",
     channels=[_SCHEMA_RESET_CHANNEL],
-    redis_conn_id="critical_redis",
+    redis_conn_id="schema_reset",
 )
 
 schema_reset_asset = Asset(
     name="schema_reset",
     uri="//schema/reset",
-    watchers=[AssetWatcher(name="redis_watcher", trigger=schema_reset_trigger)],
+    watchers=[AssetWatcher(name="redis_schema_reset_watcher", trigger=schema_reset_trigger)],
 )
 
 # ---------------------------------------------------------------------------
