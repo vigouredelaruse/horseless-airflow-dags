@@ -58,7 +58,7 @@ VENV_PIP_OPTIONS: list[str] = [
 # Environment variable builder
 # ---------------------------------------------------------------------------
 
-def build_venv_env_vars(*, include_redis: bool = False) -> dict[str, str]:
+def build_venv_env_vars(*, include_redis: bool = True) -> dict[str, str]:
     """Build the env-var dict forwarded to every ``@task.virtualenv`` subprocess.
 
     All values are resolved by ``Variable.get()`` at **DAG parse time** from
