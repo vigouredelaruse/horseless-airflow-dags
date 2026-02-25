@@ -49,8 +49,10 @@ _VENV_ENV_VARS     = build_venv_env_vars()
         "triggered by a SchemaOperationsMessage on the schema_reset Redis Pub/Sub channel."
     ),
     schedule=[schema_reset_asset],
+    catchup=False,
+    is_paused_upon_creation=False,
 )
-def repotracker_schema_reset():
+def repotracker_schema_reset_handler():
     """Repotracker schema reset DAG.
 
     Trigger flow
@@ -221,4 +223,4 @@ def repotracker_schema_reset():
     drop_and_recreate_schema(db_name)
 
 
-repotracker_schema_reset()
+repotracker_schema_reset_handler()
