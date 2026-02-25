@@ -43,6 +43,7 @@ _VENV_ENV_VARS     = build_venv_env_vars()
 @dag(
     dag_id="github_ingester",
     default_args=default_args,
+    is_paused_upon_creation=False,
     description="Ingest a GitHub model run triggered by a ModelRunDTO on Redis Pub/Sub.",
     schedule=[model_run_asset],
 )
