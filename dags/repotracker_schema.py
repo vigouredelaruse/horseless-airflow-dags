@@ -128,7 +128,7 @@ def repotracker_schema_reset_handler():
         task_id="create_database_if_not_exists",
         requirements=_VENV_REQUIREMENTS,
         pip_install_options=_VENV_PIP_OPTIONS,
-        system_site_packages=False,
+        system_site_packages=True,
         env_vars=_VENV_ENV_VARS,
     )
     def create_database_if_not_exists(dto_json: str) -> str:
@@ -166,7 +166,7 @@ def repotracker_schema_reset_handler():
         task_id="drop_and_recreate_schema",
         requirements=_VENV_REQUIREMENTS,
         pip_install_options=_VENV_PIP_OPTIONS,
-        system_site_packages=False,
+        system_site_packages=True,
         env_vars=_VENV_ENV_VARS,
     )
     def drop_and_recreate_schema(database_name: str) -> None:
