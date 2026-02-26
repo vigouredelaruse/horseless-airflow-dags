@@ -123,6 +123,9 @@ def build_venv_env_vars(*, include_redis: bool = True) -> dict[str, str]:
             "REDIS_PUBLISH_PASSWORD":                Variable.get("REDIS_PUBLISH_PASSWORD",                default=""),
             "REDIS_PUBSUB_MODELRUN_CHANNEL":          Variable.get("REDIS_PUBSUB_MODELRUN_CHANNEL",          default="modelrun"),
             "REDIS_PUBSUB_SCHEMAOPS_RESET_CHANNEL":  Variable.get("REDIS_PUBSUB_SCHEMAOPS_RESET_CHANNEL",  default="schema_reset"),
+            # Enrichment trigger channel — published by github_ingester after
+            # materialised-view refresh; consumed by enrichment_handler DAG.
+            "REDIS_PUBSUB_ENRICHMENT_CHANNEL":       Variable.get("REDIS_PUBSUB_ENRICHMENT_CHANNEL",       default="modelrun_enriched"),
         })
 
     return env_vars

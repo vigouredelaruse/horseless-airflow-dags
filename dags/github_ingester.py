@@ -352,12 +352,121 @@ def github_ingester():
 
         return asyncio.run(_ingest())
 
+    @task.virtualenv(
+        task_id="refresh_materialized_views",
+        requirements=_VENV_REQUIREMENTS,
+        pip_install_options=_VENV_PIP_OPTIONS,
+        system_site_packages=True,
+        env_vars=_VENV_ENV_VARS,
+    )
+    def refresh_materialized_views(model_run_id: int) -> int:
+        """REFRESH the three ingestion-side materialised views.
+
+        Runs after ingestion completes so that B1/B2/B3 reflect the newly
+        persisted issues, issue-timeline events, labels, and comments.
+        ``CONCURRENTLY`` is used so that existing consumers can read from the
+        views without an exclusive lock; this requires that each view already
+        have a unique index (created by the schema reset handler).
+
+        Views refreshed
+        ---------------
+        * ``mv_event_counts_by_issue_bucket`` (B1)
+        * ``mv_user_repo_activity``           (B2)
+        * ``mv_issue_label_incidence``         (B3)
+
+        Note: ``mv_analysis_ready`` is NOT refreshed here because the
+        per-stage artifact tables are still empty at this point.  It is
+        refreshed at the end of the enrichment handler DAG.
+
+        Args:
+            model_run_id: Forwarded from ``ingest_repositories``; passed
+                through unchanged so the downstream task can use it.
+
+        Returns:
+            The same ``model_run_id`` for XCom forwarding.
+        """
+        import logging
+        import os
+
+        import psycopg2
+
+        logger = logging.getLogger(__name__)
+
+        user     = os.getenv("PG_USER",     "postgres")
+        password = os.getenv("PG_PASSWORD", "")
+        host     = os.getenv("PG_HOST",     "localhost")
+        port     = int(os.getenv("PG_PORT", "5432"))
+        dbname   = os.getenv("PG_DBNAME",   "postgres")
+
+        conn = psycopg2.connect(
+            dbname=dbname, user=user, password=password, host=host, port=port
+        )
+        conn.autocommit = True   # REFRESH CONCURRENTLY cannot run in a transaction
+        try:
+            with conn.cursor() as cur:
+                for view in (
+                    "mv_event_counts_by_issue_bucket",
+                    "mv_user_repo_activity",
+                    "mv_issue_label_incidence",
+                ):
+                    logger.info("Refreshing materialised view: %s", view)
+                    cur.execute(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {view};")
+                    logger.info("Refreshed: %s", view)
+        finally:
+            conn.close()
+
+        return model_run_id
+
+    @task.virtualenv(
+        task_id="publish_enrichment_trigger",
+        requirements=_VENV_REQUIREMENTS,
+        pip_install_options=_VENV_PIP_OPTIONS,
+        system_site_packages=True,
+        env_vars=build_venv_env_vars(include_redis=True),
+    )
+    def publish_enrichment_trigger(model_run_id: int) -> int:
+        """Publish ``model_run_id`` to the enrichment trigger channel.
+
+        Fires after B1/B2/B3 materialised views have been refreshed, so the
+        enrichment handler DAG starts with consistent matrix inputs.
+
+        The :class:`RedisTransport` reads the channel name from the
+        ``REDIS_PUBSUB_ENRICHMENT_CHANNEL`` environment variable
+        (default ``"modelrun_enriched"``).  The Airflow Variable of the same
+        name must be set to the same value as the enrichment handler DAG's
+        ``MessageQueueTrigger`` subscription.
+
+        Args:
+            model_run_id: The id of the completed model run.
+
+        Returns:
+            The number of Redis Pub/Sub subscribers that received the message.
+        """
+        import logging
+
+        from horseless_repotracker.repotracker.redistransport import RedisTransport
+
+        logger = logging.getLogger(__name__)
+        transport = RedisTransport()
+        count = transport.publish_enrichment_trigger(model_run_id)
+        logger.info(
+            "Published enrichment trigger model_run_id=%d to %d subscriber(s).",
+            model_run_id,
+            count,
+        )
+        return count
+
     # -----------------------------------------------------------------------
     # Task chain
     # -----------------------------------------------------------------------
-    dto_json = extract_dto_json()
-    model_run_id = persist_model_run(dto_json)
-    ingest_repositories(model_run_id)
+    dto_json       = extract_dto_json()
+    model_run_id   = persist_model_run(dto_json)
+    ingested       = ingest_repositories(model_run_id)
+    refreshed_id   = refresh_materialized_views(model_run_id)
+    publish_enrichment_trigger(refreshed_id)
+
+    # Enforce ordering: refresh must follow ingest completion.
+    ingested >> refreshed_id
 
 
 github_ingester()
