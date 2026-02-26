@@ -16,7 +16,7 @@ _MODELRUN_CHANNEL = Variable.get("REDIS_PUBSUB_MODELRUN_CHANNEL", default="model
 model_run_trigger = MessageQueueTrigger(
     scheme="redis+pubsub",
     channels=[_MODELRUN_CHANNEL],
-    redis_conn_id="model_run",
+    redis_conn_id="critical_redis",
 )
 
 model_run_asset = Asset(
