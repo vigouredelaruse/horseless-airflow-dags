@@ -75,7 +75,7 @@ def repotracker_schema_reset():
         task_id="publish_schema_reset_message",
         requirements=_VENV_REQUIREMENTS,
         pip_install_options=_VENV_PIP_OPTIONS,
-        system_site_packages=False,
+        system_site_packages=True,
         env_vars=_VENV_ENV_VARS,
     )
     def publish_schema_reset_message(database_name: str) -> int:
