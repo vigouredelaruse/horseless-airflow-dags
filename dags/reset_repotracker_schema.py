@@ -79,10 +79,10 @@ def repotracker_schema_reset():
         image_pull_policy="IfNotPresent",
         startup_timeout_seconds=600,
         resources={
-            "cpu": "200m",
-            "memory": "1Gi",
-            "limits_cpu": "1",
-            "limits_memory": "2Gi",
+            "request_cpu": "200m",
+            "request_memory": "1Gi",
+            "limit_cpu": "1",
+            "limit_memory": "2Gi",
         },
     )
     def publish_schema_reset_message(database_name: str) -> int:
