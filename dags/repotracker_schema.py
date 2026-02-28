@@ -71,13 +71,13 @@ def repotracker_schema_reset_handler():
       that pulls the raw JSON string from the trigger event context and
       passes it downstream as an XCom value.
 
-    * **create_database_if_not_exists** — ``@task.virtualenv`` that
+    * **create_database_if_not_exists** — ``@task`` that
       deserialises the :class:`SchemaOperationsMessage` and calls
       :meth:`PersistenceSQLAlchemy.create_database_from_env` with
       ``database_name`` as the target.  The task is idempotent — if the
       database already exists the call is a no-op.
 
-    * **drop_and_recreate_schema** — ``@task.virtualenv`` that
+    * **drop_and_recreate_schema** — ``@task`` that
       unconditionally drops the target database (terminating all existing
       connections first) then creates it fresh and runs
       ``Base.metadata.create_all()`` via the ORM layer.  This is
@@ -124,13 +124,7 @@ def repotracker_schema_reset_handler():
             )
         return payload["data"]
 
-    @task.virtualenv(
-        task_id="create_database_if_not_exists",
-        requirements=_VENV_REQUIREMENTS,
-        pip_install_options=_VENV_PIP_OPTIONS,
-        system_site_packages=True,
-        env_vars=_VENV_ENV_VARS,
-    )
+    @task(task_id="create_database_if_not_exists")
     def create_database_if_not_exists(dto_json: str) -> str:
         """Ensure the target database named in the DTO exists.
 
@@ -162,13 +156,7 @@ def repotracker_schema_reset_handler():
         )
         return msg.database_name
 
-    @task.virtualenv(
-        task_id="drop_and_recreate_schema",
-        requirements=_VENV_REQUIREMENTS,
-        pip_install_options=_VENV_PIP_OPTIONS,
-        system_site_packages=True,
-        env_vars=_VENV_ENV_VARS,
-    )
+    @task(task_id="drop_and_recreate_schema")
     def drop_and_recreate_schema(database_name: str) -> None:
         """Destructively drop and re-create the target database schema.
 
@@ -217,13 +205,7 @@ def repotracker_schema_reset_handler():
         orm = PersistenceSQLAlchemy(db_url=db_url)
         orm.shutdown()
 
-    @task.virtualenv(
-        task_id="create_materialized_views",
-        requirements=_VENV_REQUIREMENTS,
-        pip_install_options=_VENV_PIP_OPTIONS,
-        system_site_packages=True,
-        env_vars=_VENV_ENV_VARS,
-    )
+    @task(task_id="create_materialized_views")
     def create_materialized_views(database_name: str) -> None:
         """Create all materialised views and their unique indexes.
 

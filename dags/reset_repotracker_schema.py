@@ -71,13 +71,7 @@ def repotracker_schema_reset():
             )
         return database_name
 
-    @task.virtualenv(
-        task_id="publish_schema_reset_message",
-        requirements=_VENV_REQUIREMENTS,
-        pip_install_options=_VENV_PIP_OPTIONS,
-        system_site_packages=True,
-        env_vars=_VENV_ENV_VARS,
-    )
+    @task(task_id="publish_schema_reset_message")
     def publish_schema_reset_message(database_name: str) -> int:
         """Publish a :class:`SchemaOperationsMessage` to the schema_reset channel.
 
