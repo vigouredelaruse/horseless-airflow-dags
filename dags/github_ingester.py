@@ -165,7 +165,11 @@ def github_ingester():
         from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
         from horseless_repotracker.repotracker.dto import ModelRunDTO
-        from horseless_repotracker.repotracker.orm import ModelRunParameterORM, SpectralConfigORM
+        from horseless_repotracker.repotracker.orm import (
+            ModelRunORM,
+            ModelRunParameterORM,
+            SpectralConfigORM,
+        )
         from horseless_repotracker.repotracker.persistence_sqlalchemy import PersistenceSQLAlchemy
         from horseless_repotracker.repotracker.sqlalchemy_model import (
             ModelRun,
@@ -182,27 +186,35 @@ def github_ingester():
 
             try:
                 # ----------------------------------------------------------
-                # 1. ModelRun — insert via plain async session (no ORM helper
-                #    class exists for ModelRun; mirrors the pattern in conftest).
+                # 1. ModelRun — create via ModelRunORM helper
                 # ----------------------------------------------------------
-                async with sf() as session:
-                    async with session.begin():
-                        model_run = ModelRun(
-                            model_name=dto.model_name,
-                            started_at=datetime.utcnow(),
-                            status="initialized",
-                            parameters={
-                                "repos": dto.repos,
-                                "start_date": dto.start_date,
-                                "end_date": dto.end_date,
-                                "keyword": dto.keyword,
-                            },
-                            notes=f"Model run for {dto.model_name}",
-                        )
-                        session.add(model_run)
-                    # id is populated after the transaction commits.
-                    await session.refresh(model_run)
-                    model_run_id: int = model_run.id
+                model_run_orm = ModelRunORM(sf)
+
+                # Map DTO fields into ModelRun where names match the table columns.
+                mr_table = ModelRun.__table__
+                model_run_kwargs = {}
+                for col in mr_table.columns:
+                    if col.name == "xmin":
+                        continue
+                    if col.name == "started_at":
+                        model_run_kwargs["started_at"] = datetime.utcnow()
+                        continue
+                    # Only copy values where the DTO exposes the same attribute name.
+                    if hasattr(dto, col.name):
+                        model_run_kwargs[col.name] = getattr(dto, col.name)
+
+                # Ensure the parameters JSON contains the canonical form-data keys.
+                model_run_kwargs.setdefault("parameters", {
+                    "repos": dto.repos,
+                    "start_date": dto.start_date,
+                    "end_date": dto.end_date,
+                    "keyword": dto.keyword,
+                })
+                model_run_kwargs.setdefault("status", "initialized")
+                model_run_kwargs.setdefault("notes", f"Model run for {dto.model_name}")
+
+                model_run = ModelRun(**model_run_kwargs)
+                model_run_id: int = await model_run_orm.upsert(model_run)
 
                 # ----------------------------------------------------------
                 # 2. ModelRunParameter
@@ -226,18 +238,17 @@ def github_ingester():
                 # ----------------------------------------------------------
                 sc_orm = SpectralConfigORM(sf)
                 sc_cfg = dto.spectral_config
-                spectral = SpectralConfig(
-                    model_run_parameter_id=param_id,
-                    base_sample_rate=sc_cfg.base_sample_rate,
-                    window_size=sc_cfg.window_size,
-                    step_size=sc_cfg.step_size,
-                    target_samples=sc_cfg.target_samples,
-                    frame_budget=sc_cfg.frame_budget,
-                    playback_seconds=sc_cfg.playback_seconds,
-                    min_interval=sc_cfg.min_interval,
-                    max_interval=sc_cfg.max_interval,
-                    smooth_window=sc_cfg.smooth_window,
-                )
+
+                # Build SpectralConfig from DTO by mapping matching field names.
+                sc_table = SpectralConfig.__table__
+                spectral_kwargs = {"model_run_parameter_id": param_id}
+                for col in sc_table.columns:
+                    if col.name in ("id", "xmin", "model_run_parameter_id"):
+                        continue
+                    if hasattr(sc_cfg, col.name):
+                        spectral_kwargs[col.name] = getattr(sc_cfg, col.name)
+
+                spectral = SpectralConfig(**spectral_kwargs)
                 await sc_orm.upsert(spectral)
 
                 return model_run_id

@@ -3,7 +3,7 @@
 --extra-index-url https://pypi.nvidia.com
 --extra-index-url https://download.pytorch.org/whl/cu130
 
-horseless-repotracker>=0.0.20
+horseless-repotracker>=0.0.25
 
 twine 
 keyring 
