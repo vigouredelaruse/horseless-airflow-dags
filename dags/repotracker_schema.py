@@ -129,6 +129,12 @@ def repotracker_schema_reset_handler():
         image="thehorselessnewspaper/horseless-repotracker:latest",
         name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
+        image_pull_policy="IfNotPresent",
+        startup_timeout_seconds=600,
+        resources={
+            "requests": {"memory": "1Gi", "cpu": "200m"},
+            "limits": {"memory": "2Gi", "cpu": "1"},
+        },
     )
     def create_database_if_not_exists(dto_json: str) -> str:
         """Ensure the target database named in the DTO exists.
@@ -166,6 +172,12 @@ def repotracker_schema_reset_handler():
         image="thehorselessnewspaper/horseless-repotracker:latest",
         name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
+        image_pull_policy="IfNotPresent",
+        startup_timeout_seconds=600,
+        resources={
+            "requests": {"memory": "1Gi", "cpu": "200m"},
+            "limits": {"memory": "2Gi", "cpu": "1"},
+        },
     )
     def drop_and_recreate_schema(database_name: str) -> None:
         """Destructively drop and re-create the target database schema.
@@ -220,6 +232,12 @@ def repotracker_schema_reset_handler():
         image="thehorselessnewspaper/horseless-repotracker:latest",
         name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
+        image_pull_policy="IfNotPresent",
+        startup_timeout_seconds=600,
+        resources={
+            "requests": {"memory": "1Gi", "cpu": "200m"},
+            "limits": {"memory": "2Gi", "cpu": "1"},
+        },
     )
     def create_materialized_views(database_name: str) -> None:
         """Create all materialised views and their unique indexes.
