@@ -71,7 +71,12 @@ def repotracker_schema_reset():
             )
         return database_name
 
-    @task(task_id="publish_schema_reset_message")
+    @task.kubernetes(
+        task_id="publish_schema_reset_message",
+        image="thehorselessnewspaper/horseless-repotracker:latest",
+        name="k8s-env-task",
+        env_vars=_VENV_ENV_VARS,
+    )
     def publish_schema_reset_message(database_name: str) -> int:
         """Publish a :class:`SchemaOperationsMessage` to the schema_reset channel.
 

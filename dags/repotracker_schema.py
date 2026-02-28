@@ -124,7 +124,12 @@ def repotracker_schema_reset_handler():
             )
         return payload["data"]
 
-    @task(task_id="create_database_if_not_exists")
+    @task.kubernetes(
+        task_id="create_database_if_not_exists",
+        image="thehorselessnewspaper/horseless-repotracker:latest",
+        name="k8s-env-task",
+        env_vars=_VENV_ENV_VARS,
+    )
     def create_database_if_not_exists(dto_json: str) -> str:
         """Ensure the target database named in the DTO exists.
 
@@ -156,7 +161,12 @@ def repotracker_schema_reset_handler():
         )
         return msg.database_name
 
-    @task(task_id="drop_and_recreate_schema")
+    @task.kubernetes(
+        task_id="drop_and_recreate_schema",
+        image="thehorselessnewspaper/horseless-repotracker:latest",
+        name="k8s-env-task",
+        env_vars=_VENV_ENV_VARS,
+    )
     def drop_and_recreate_schema(database_name: str) -> None:
         """Destructively drop and re-create the target database schema.
 
@@ -205,7 +215,12 @@ def repotracker_schema_reset_handler():
         orm = PersistenceSQLAlchemy(db_url=db_url)
         orm.shutdown()
 
-    @task(task_id="create_materialized_views")
+    @task.kubernetes(
+        task_id="create_materialized_views",
+        image="thehorselessnewspaper/horseless-repotracker:latest",
+        name="k8s-env-task",
+        env_vars=_VENV_ENV_VARS,
+    )
     def create_materialized_views(database_name: str) -> None:
         """Create all materialised views and their unique indexes.
 
