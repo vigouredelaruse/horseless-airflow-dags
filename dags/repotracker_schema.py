@@ -132,8 +132,10 @@ def repotracker_schema_reset_handler():
         image_pull_policy="IfNotPresent",
         startup_timeout_seconds=600,
         resources={
-            "requests": {"memory": "1Gi", "cpu": "200m"},
-            "limits": {"memory": "2Gi", "cpu": "1"},
+            "cpu": "200m",
+            "memory": "1Gi",
+            "limits_cpu": "1",
+            "limits_memory": "2Gi",
         },
     )
     def create_database_if_not_exists(dto_json: str) -> str:
@@ -175,8 +177,10 @@ def repotracker_schema_reset_handler():
         image_pull_policy="IfNotPresent",
         startup_timeout_seconds=600,
         resources={
-            "requests": {"memory": "1Gi", "cpu": "200m"},
-            "limits": {"memory": "2Gi", "cpu": "1"},
+            "cpu": "200m",
+            "memory": "1Gi",
+            "limits_cpu": "1",
+            "limits_memory": "2Gi",
         },
     )
     def drop_and_recreate_schema(database_name: str) -> None:
@@ -235,8 +239,10 @@ def repotracker_schema_reset_handler():
         image_pull_policy="IfNotPresent",
         startup_timeout_seconds=600,
         resources={
-            "requests": {"memory": "1Gi", "cpu": "200m"},
-            "limits": {"memory": "2Gi", "cpu": "1"},
+            "cpu": "200m",
+            "memory": "1Gi",
+            "limits_cpu": "1",
+            "limits_memory": "2Gi",
         },
     )
     def create_materialized_views(database_name: str) -> None:
