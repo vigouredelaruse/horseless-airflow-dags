@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "skills": {
+    "airflow": {
+      "source": "necatiarslan/airflow-vscode-extension",
+      "sourceType": "github",
+      "computedHash": "c4ddd1e6a8ad4170aab92e1d5d169e23dbe6f6ca9641a9ce28470ddf7218736d"
+    },
+    "airflow-hitl": {
+      "source": "necatiarslan/airflow-vscode-extension",
+      "sourceType": "github",
+      "computedHash": "562bf6ebc30460f567743474d45af0a59a04a46f2f50c61a559b596e68ba8a3f"
+    },
+    "annotating-task-lineage": {
+      "source": "necatiarslan/airflow-vscode-extension",
+      "sourceType": "github",
+      "computedHash": "2284d61f36df2f57f295077e717fa767546297e9e8710d89476ca58fa84debc3"
+    },
+    "authoring-dags": {
+      "source": "necatiarslan/airflow-vscode-extension",
+      "sourceType": "github",
+      "computedHash": "0bde47a51f64940d10daa1d3a8663b88548ff4daeaa0f019ea1b121bedf14b34"
+    },
+    "creating-openlineage-extractors": {
+      "source": "necatiarslan/airflow-vscode-extension",
+      "sourceType": "github",
+      "computedHash": "bf61c7cc954eeba19c9138774e936dc52d83f3c499dfbc46395a5c1f46e79a1d"
+    },
+    "debugging-dags": {
+      "source": "necatiarslan/airflow-vscode-extension",
+      "sourceType": "github",
+      "computedHash": "f6bff128d854345495a7e0ee348e5b3faabd31a9768a7ea2aedb6e8fd1a1c8ce"
+    },
+    "managing-astro-local-env": {
+      "source": "necatiarslan/airflow-vscode-extension",
+      "sourceType": "github",
+      "computedHash": "50ac0128e9da2585d2081e4f63a1ee4f3af7713d227fc4c81be15419bb1fae51"
+    },
+    "migrating-airflow-2-to-3": {
+      "source": "necatiarslan/airflow-vscode-extension",
+      "sourceType": "github",
+      "computedHash": "1edc4dd50eec3854ea3425f724fb14d96d8b701cef4dd643f64b48e1b4ca723f"
+    },
+    "setting-up-astro-project": {
+      "source": "necatiarslan/airflow-vscode-extension",
+      "sourceType": "github",
+      "computedHash": "977f38c96f4244bf5ce0b4e83d98779a44b2ee60a0e3bfe665fc7b4f7ebca703"
+    },
+    "testing-dags": {
+      "source": "necatiarslan/airflow-vscode-extension",
+      "sourceType": "github",
+      "computedHash": "805ce69bcef3f353e741b7bd33c1f877ae674c17524272845b1b986b2784de51"
+    },
+    "tracing-downstream-lineage": {
+      "source": "necatiarslan/airflow-vscode-extension",
+      "sourceType": "github",
+      "computedHash": "70b501ef871b86e1868a5e6085690fd86bd3bf80b501c0319a86ac4dd397fa99"
+    },
+    "tracing-upstream-lineage": {
+      "source": "necatiarslan/airflow-vscode-extension",
+      "sourceType": "github",
+      "computedHash": "6768c7f9dda092138472485e635d263d2e785105acfd0e582aa1920007ff7b30"
+    }
+  }
+}

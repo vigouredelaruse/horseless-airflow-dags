@@ -82,9 +82,9 @@ def build_venv_env_vars(*, include_redis: bool = True) -> dict[str, str]:
     """
     env_vars: dict[str, str] = {
         # PostgreSQL connection
-        "PG_HOST":     Variable.get("PG_HOST",     default="picok8s.dubridge.ataxlab.com"),
-        "PG_PORT":     Variable.get("PG_PORT",     default="32432"),
-        "PG_DBNAME":   Variable.get("PG_DBNAME",   default="horseless_repotracker_tests"),
+        "PG_HOST":     Variable.get("PG_HOST",     default="appliance.dubridge.ataxlab.com"),
+        "PG_PORT":     Variable.get("PG_PORT",     default="32433"),
+        "PG_DBNAME":   Variable.get("PG_DBNAME",   default="horseless-repotracker"),
         "PG_USER":     Variable.get("PG_USER",     default="postgres"),
         "PG_PASSWORD": Variable.get("PG_PASSWORD", default="postgres"),
         "DB_ENABLED":  Variable.get("DB_ENABLED",  default="true"),
