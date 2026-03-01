@@ -171,11 +171,9 @@ def repotracker_schema_reset_handler():
         name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
         image_pull_policy="IfNotPresent",
-        startup_timeout_seconds=600,
-        resources={
-            "limit_cpu": "1",
-            "limit_memory": "2Gi",
-        },
+        startup_timeout_seconds=600, 
+        get_logs=True,
+        is_delete_operator_pod=False
     )
     def drop_and_recreate_schema(database_name: str) -> None:
         """Destructively drop and re-create the target database schema.
