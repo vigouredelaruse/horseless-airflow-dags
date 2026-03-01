@@ -132,9 +132,7 @@ def repotracker_schema_reset_handler():
         image_pull_policy="IfNotPresent",
         startup_timeout_seconds=600, 
         get_logs=True,
-        is_delete_operator_pod=False,
-        requests={"cpu": "100m", "memory": "1Gi"},
-        limits={"cpu": "500m", "memory": "2Gi"},
+        is_delete_operator_pod=False
     )
     def create_database_if_not_exists(dto_json: str) -> str:
         """Ensure the target database named in the DTO exists.
