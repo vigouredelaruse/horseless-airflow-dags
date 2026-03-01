@@ -170,8 +170,7 @@ def repotracker_schema_reset_handler():
         image="thehorselessnewspaper/horseless-repotracker:latest",
         name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
-        image_pull_policy="IfNotPresent",
-        startup_timeout_seconds=600, 
+        image_pull_policy="IfNotPresent", 
         get_logs=True,
         is_delete_operator_pod=False
     )
@@ -229,8 +228,7 @@ def repotracker_schema_reset_handler():
         image="thehorselessnewspaper/horseless-repotracker:latest",
         name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
-        image_pull_policy="IfNotPresent",
-        startup_timeout_seconds=600, 
+        image_pull_policy="IfNotPresent", 
         get_logs=True,
         is_delete_operator_pod=False
     )
