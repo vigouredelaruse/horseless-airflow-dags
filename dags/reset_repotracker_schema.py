@@ -80,10 +80,8 @@ def repotracker_schema_reset():
         startup_timeout_seconds=600,
         get_logs=True,
         is_delete_operator_pod=False,
-        resources={
-            "limit_cpu": "1",
-            "limit_memory": "2Gi",
-        },
+        requests={"cpu": "100m", "memory": "1Gi"},
+        limits={"cpu": "500m", "memory": "2Gi"},
     )
     def publish_schema_reset_message(database_name: str) -> int:
         """Publish a :class:`SchemaOperationsMessage` to the schema_reset channel.
