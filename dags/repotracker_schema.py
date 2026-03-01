@@ -135,7 +135,7 @@ def repotracker_schema_reset_handler():
 
     @task.kubernetes(
         task_id="create_database_if_not_exists",
-        image="thehorselessnewspaper/horseless-repotracker@sha256:4e931bed734c5d4b3f430aa2f5da5ec7199d1bcfa5aef78cf580ae09bb4fee6a",
+        image="thehorselessnewspaper/horseless-repotracker@sha256:c9d9674c791fbf77b8bb75cef8adaa6f381b5f5dbc93761affa69bfb96228b63",
         name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
         image_pull_policy="IfNotPresent",
@@ -180,7 +180,7 @@ def repotracker_schema_reset_handler():
 
     @task.kubernetes(
         task_id="drop_and_recreate_schema",
-        image="thehorselessnewspaper/horseless-repotracker@sha256:4e931bed734c5d4b3f430aa2f5da5ec7199d1bcfa5aef78cf580ae09bb4fee6a",
+        image="thehorselessnewspaper/horseless-repotracker@sha256:c9d9674c791fbf77b8bb75cef8adaa6f381b5f5dbc93761affa69bfb96228b63",
         name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
         image_pull_policy="IfNotPresent", 
@@ -245,7 +245,7 @@ def repotracker_schema_reset_handler():
 
     @task.kubernetes(
         task_id="create_materialized_views",
-        image="thehorselessnewspaper/horseless-repotracker@sha256:4e931bed734c5d4b3f430aa2f5da5ec7199d1bcfa5aef78cf580ae09bb4fee6a",
+        image="thehorselessnewspaper/horseless-repotracker@sha256:c9d9674c791fbf77b8bb75cef8adaa6f381b5f5dbc93761affa69bfb96228b63",
         name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
         image_pull_policy="IfNotPresent", 
