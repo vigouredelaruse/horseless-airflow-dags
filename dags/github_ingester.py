@@ -128,14 +128,17 @@ def github_ingester():
             )
         return payload["data"]
 
-    @task.virtualenv(
+    @task.kubernetes(
         task_id="persist_model_run",
-        requirements=_VENV_REQUIREMENTS,
-        pip_install_options=_VENV_PIP_OPTIONS,
-        system_site_packages=True,
+        image="thehorselessnewspaper/horseless-repotracker@sha256:c9d9674c791fbf77b8bb75cef8adaa6f381b5f5dbc93761affa69bfb96228b63",
+        name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
+        image_pull_policy="IfNotPresent",
+        system_site_packages=True,
+        get_logs=True,
+        is_delete_operator_pod=False,
     )
-    def persist_model_run(dto_json: str) -> int:
+    def persist_model_run(dto_json: str) -> None:
         """Deserialise a ModelRunDTO JSON string and persist the entity chain.
 
         Persists:
@@ -256,16 +259,24 @@ def github_ingester():
             finally:
                 await engine.dispose()
 
-        return asyncio.run(_persist())
+        model_run_id = asyncio.run(_persist())
+        print(f"[persist_model_run] upserted model_run_id={model_run_id}")
+        # NOTE: Kubernetes task runner discards return values to /dev/null,
+        # so we intentionally do not return model_run_id. Downstream tasks
+        # derive or re-upsert the same ModelRun to obtain the id when needed.
+        return None
 
-    @task.virtualenv(
+    @task.kubernetes(
         task_id="ingest_repositories",
-        requirements=_VENV_REQUIREMENTS,
-        pip_install_options=_VENV_PIP_OPTIONS,
-        system_site_packages=True,
+        image="thehorselessnewspaper/horseless-repotracker@sha256:c9d9674c791fbf77b8bb75cef8adaa6f381b5f5dbc93761affa69bfb96228b63",
+        name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
+        image_pull_policy="IfNotPresent",
+        system_site_packages=True,
+        get_logs=True,
+        is_delete_operator_pod=False,
     )
-    def ingest_repositories(model_run_id: int) -> list:
+    def ingest_repositories(dto_json: str) -> None:
         """Stream repositories from the ModelRunParameter and ingest issues.
 
         For each ``owner/repo`` string in :attr:`ModelRunParameter.repos`:
@@ -340,20 +351,38 @@ def github_ingester():
             sf = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
             try:
+                # Derive model_run_id by upserting/read ModelRun from the DTO.
+                dto = ModelRunDTO.from_json(dto_json)
+                # Upsert ModelRun minimally to obtain id (idempotent).
+                mr_table = ModelRun.__table__
+                model_run_kwargs = {}
+                for col in mr_table.columns:
+                    if col.name == "xmin":
+                        continue
+                    if col.name == "started_at":
+                        model_run_kwargs["started_at"] = datetime.utcnow()
+                        continue
+                    if hasattr(dto, col.name):
+                        model_run_kwargs[col.name] = getattr(dto, col.name)
+
+                model_run = ModelRun(**model_run_kwargs)
+                model_run_id: int = await ModelRunORM(sf).upsert(model_run)
+
                 param_orm = ModelRunParameterORM(sf)
                 params = await param_orm.get_by_model_run(model_run_id)
+                # If parameters missing (persist_model_run may not have executed),
+                # fall back to DTO fields.
                 if params is None:
-                    raise ValueError(
-                        f"No ModelRunParameter found for model_run_id={model_run_id}"
-                    )
-
-                token: str = params.token or os.environ.get("GITHUB_TOKEN", "")
-                repos: list = params.repos if isinstance(params.repos, list) else list(params.repos)
+                    token: str = dto.token or os.environ.get("GITHUB_TOKEN", "")
+                    repos: list = dto.repos if isinstance(dto.repos, list) else list(dto.repos)
+                else:
+                    token: str = params.token or os.environ.get("GITHUB_TOKEN", "")
+                    repos: list = params.repos if isinstance(params.repos, list) else list(params.repos)
 
                 ingestor = IssueIngestor(github_token=token)
                 ingested: list = []
 
-                async for repository in _stream_repositories(repos, token, sf, model_run_id): 
+                async for repository in _stream_repositories(repos, token, sf, model_run_id):
                     ingested.append(repository)
 
                 return ingested
@@ -361,16 +390,22 @@ def github_ingester():
             finally:
                 await engine.dispose()
 
-        return asyncio.run(_ingest())
+        ingested = asyncio.run(_ingest())
+        print(f"[ingest_repositories] ingested {len(ingested)} repositories")
+        # Do not return the list — Kubernetes pods discard return values to /dev/null.
+        return None
 
-    @task.virtualenv(
+    @task.kubernetes(
         task_id="refresh_materialized_views",
-        requirements=_VENV_REQUIREMENTS,
-        pip_install_options=_VENV_PIP_OPTIONS,
-        system_site_packages=True,
+        image="thehorselessnewspaper/horseless-repotracker@sha256:c9d9674c791fbf77b8bb75cef8adaa6f381b5f5dbc93761affa69bfb96228b63",
+        name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
+        image_pull_policy="IfNotPresent",
+        system_site_packages=True,
+        get_logs=True,
+        is_delete_operator_pod=False,
     )
-    def refresh_materialized_views(model_run_id: int) -> int:
+    def refresh_materialized_views(dto_json: str) -> None:
         """REFRESH the three ingestion-side materialised views.
 
         Runs after ingestion completes so that B1/B2/B3 reflect the newly
@@ -426,16 +461,19 @@ def github_ingester():
         finally:
             conn.close()
 
-        return model_run_id
+        print("[refresh_materialized_views] refreshed ingestion views")
+        return None
 
-    @task.virtualenv(
+    @task.kubernetes(
         task_id="publish_enrichment_trigger",
-        requirements=_VENV_REQUIREMENTS,
-        pip_install_options=_VENV_PIP_OPTIONS,
-        system_site_packages=True,
+        image="thehorselessnewspaper/horseless-repotracker@sha256:c9d9674c791fbf77b8bb75cef8adaa6f381b5f5dbc93761affa69bfb96228b63",
+        name="k8s-env-task",
         env_vars=build_venv_env_vars(include_redis=True),
+        image_pull_policy="IfNotPresent",
+        get_logs=True,
+        is_delete_operator_pod=False,
     )
-    def publish_enrichment_trigger(model_run_id: int) -> int:
+    def publish_enrichment_trigger(dto_json: str) -> None:
         """Publish ``model_run_id`` to the enrichment trigger channel.
 
         Fires after B1/B2/B3 materialised views have been refreshed, so the
@@ -458,6 +496,32 @@ def github_ingester():
         from horseless_repotracker.repotracker.redistransport import RedisTransport
 
         logger = logging.getLogger(__name__)
+        dto = ModelRunDTO.from_json(dto_json)
+        model_run_id = dto.model_run_id
+        # If DTO has no explicit model_run_id, attempt to upsert/read it.
+        if not model_run_id:
+            # Minimal upsert to obtain id
+            url = PersistenceSQLAlchemy.get_async_postgres_db_url()
+            engine = create_async_engine(url, echo=False)
+            sf = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+            async def _get_id():
+                mr_table = ModelRun.__table__
+                model_run_kwargs = {}
+                for col in mr_table.columns:
+                    if col.name == "xmin":
+                        continue
+                    if col.name == "started_at":
+                        model_run_kwargs["started_at"] = datetime.utcnow()
+                        continue
+                    if hasattr(dto, col.name):
+                        model_run_kwargs[col.name] = getattr(dto, col.name)
+                model_run = ModelRun(**model_run_kwargs)
+                return await ModelRunORM(sf).upsert(model_run)
+            try:
+                model_run_id = asyncio.run(_get_id())
+            finally:
+                asyncio.run(engine.dispose())
+
         transport = RedisTransport()
         count = transport.publish_enrichment_trigger(model_run_id)
         logger.info(
@@ -465,19 +529,22 @@ def github_ingester():
             model_run_id,
             count,
         )
-        return count
+        print(f"[publish_enrichment_trigger] published model_run_id={model_run_id} subscriber_count={count}")
+        return None
 
     # -----------------------------------------------------------------------
     # Task chain
     # -----------------------------------------------------------------------
-    dto_json       = extract_dto_json()
-    model_run_id   = persist_model_run(dto_json)
-    ingested       = ingest_repositories(model_run_id)
-    refreshed_id   = refresh_materialized_views(model_run_id)
-    publish_enrichment_trigger(refreshed_id)
+    dto_json = extract_dto_json()
+    # Fan-out dto_json to Kubernetes tasks. Persist/ingest/refresh/publish
+    # do not rely on K8s-to-K8s XCom return values — they are discarded.
+    persist = persist_model_run(dto_json)
+    ingested = ingest_repositories(dto_json)
+    refreshed = refresh_materialized_views(dto_json)
+    published = publish_enrichment_trigger(dto_json)
 
-    # Enforce ordering: refresh must follow ingest completion.
-    ingested >> refreshed_id
+    # Enforce ordering explicitly via task edges
+    persist >> ingested >> refreshed >> published
 
 
 github_ingester()
