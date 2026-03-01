@@ -79,7 +79,11 @@ def repotracker_schema_reset():
         image_pull_policy="IfNotPresent",
         startup_timeout_seconds=600,
         get_logs=True,
-        is_delete_operator_pod=False
+        is_delete_operator_pod=False,
+        resources={
+            "request_memory": "1Gi",
+            "limit_memory": "2Gi",
+        },
     )
     def publish_schema_reset_message(database_name: str) -> int:
         """Publish a :class:`SchemaOperationsMessage` to the schema_reset channel.
@@ -114,4 +118,3 @@ def repotracker_schema_reset():
 
 
 repotracker_schema_reset()
-    
