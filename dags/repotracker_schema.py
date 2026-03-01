@@ -66,22 +66,31 @@ def repotracker_schema_reset_handler():
     ``extract_dto_json``
         →  ``create_database_if_not_exists``
         →  ``drop_and_recreate_schema``
+        →  ``create_materialized_views``
 
     * **extract_dto_json** — lightweight ``@task`` (no virtualenv overhead)
       that pulls the raw JSON string from the trigger event context and
-      passes it downstream as an XCom value.
+      pushes it to XCom.  This is the *sole* reliable XCom source for all
+      downstream Kubernetes tasks — ``@task.kubernetes`` pods write their
+      return values to ``/dev/null`` so K8s-to-K8s XCom chaining is not
+      used.
 
-    * **create_database_if_not_exists** — ``@task`` that
+    * **create_database_if_not_exists** — ``@task.kubernetes`` that
       deserialises the :class:`SchemaOperationsMessage` and calls
       :meth:`PersistenceSQLAlchemy.create_database_from_env` with
-      ``database_name`` as the target.  The task is idempotent — if the
-      database already exists the call is a no-op.
+      ``database_name`` as the target.  Idempotent.  Returns ``None``;
+      ordering enforced via an explicit ``>>`` edge.
 
-    * **drop_and_recreate_schema** — ``@task`` that
+    * **drop_and_recreate_schema** — ``@task.kubernetes`` that
       unconditionally drops the target database (terminating all existing
       connections first) then creates it fresh and runs
       ``Base.metadata.create_all()`` via the ORM layer.  This is
       deliberately destructive; the trigger chain is the safety gate.
+      Returns ``None``.
+
+    * **create_materialized_views** — ``@task.kubernetes`` that creates
+      all materialised views after the schema is in place.  Returns
+      ``None``.
     """
 
     @task(task_id="extract_dto_json")
@@ -134,7 +143,7 @@ def repotracker_schema_reset_handler():
         get_logs=True,
         is_delete_operator_pod=False
     )
-    def create_database_if_not_exists(dto_json: str) -> str:
+    def create_database_if_not_exists(dto_json: str) -> None:
         """Ensure the target database named in the DTO exists.
 
         Deserialises the :class:`SchemaOperationsMessage` and calls
@@ -148,13 +157,17 @@ def repotracker_schema_reset_handler():
             dto_json: JSON string encoding a :class:`SchemaOperationsMessage`.
 
         Returns:
-            The ``database_name`` from the DTO, forwarded downstream.
+            None.  Ordering relative to the next task is enforced via an
+            explicit ``>>`` edge; the ``@task.kubernetes`` script runner
+            discards return values to ``/dev/null`` so XCom from this pod
+            is not used.
         """
         import os
         from horseless_repotracker.repotracker.dto import SchemaOperationsMessage
         from horseless_repotracker.repotracker.persistence_sqlalchemy import PersistenceSQLAlchemy
 
         msg = SchemaOperationsMessage.from_json(dto_json)
+        print(f"[create_database_if_not_exists] target database: {msg.database_name}")
 
         PersistenceSQLAlchemy.create_database_from_env(
             dbname=msg.database_name,
@@ -163,7 +176,7 @@ def repotracker_schema_reset_handler():
             host=os.getenv("PG_HOST"),
             port=int(os.getenv("PG_PORT", "5432")),
         )
-        return msg.database_name
+        print(f"[create_database_if_not_exists] database '{msg.database_name}' is ready")
 
     @task.kubernetes(
         task_id="drop_and_recreate_schema",
@@ -174,7 +187,7 @@ def repotracker_schema_reset_handler():
         get_logs=True,
         is_delete_operator_pod=False
     )
-    def drop_and_recreate_schema(database_name: str) -> str:
+    def drop_and_recreate_schema(dto_json: str) -> None:
         """Destructively drop and re-create the target database schema.
 
         Sequence:
@@ -187,15 +200,22 @@ def repotracker_schema_reset_handler():
            schema to the fresh database.
 
         Args:
-            database_name: Name of the PostgreSQL database to drop and
-                re-create.  Sourced from the upstream task via XCom.
+            dto_json: JSON string encoding a :class:`SchemaOperationsMessage`.
+                Sourced directly from ``extract_dto_json`` via its plain
+                ``@task`` XCom (not from the upstream Kubernetes pod return
+                value, which is unreliable when the task runner writes its
+                output to ``/dev/null``).
         """
         import os
+        from horseless_repotracker.repotracker.dto import SchemaOperationsMessage
         from horseless_repotracker.repotracker.sqlalchemy_model import drop_database, create_database
         from horseless_repotracker.repotracker.persistence_sqlalchemy import PersistenceSQLAlchemy
 
+        msg = SchemaOperationsMessage.from_json(dto_json)
+        database_name = msg.database_name
+
         user     = os.getenv("PG_USER",     "postgres")
-        password = os.getenv("PG_PASSWORD", "")
+        password = os.getenv("PG_PASSWORD", "postgres")  # match build_venv_env_vars default; "" is falsy
         host     = os.getenv("PG_HOST",     "localhost")
         port     = int(os.getenv("PG_PORT", "5432"))
 
@@ -221,7 +241,7 @@ def repotracker_schema_reset_handler():
         db_url = f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{database_name}"
         orm = PersistenceSQLAlchemy(db_url=db_url)
         orm.shutdown()
-        return database_name
+        print(f"[drop_and_recreate_schema] schema reset complete for '{database_name}'")
 
     @task.kubernetes(
         task_id="create_materialized_views",
@@ -232,13 +252,19 @@ def repotracker_schema_reset_handler():
         get_logs=True,
         is_delete_operator_pod=False
     )
-    def create_materialized_views(database_name: str) -> None:
+    def create_materialized_views(dto_json: str) -> None:
         """Create all materialised views and their unique indexes.
 
         This task runs after ``drop_and_recreate_schema`` so the underlying
         hypertables and ORM tables already exist.  All DDL statements use
         ``IF NOT EXISTS`` / ``CREATE UNIQUE INDEX IF NOT EXISTS`` so the task
         is idempotent and safe to re-run.
+
+        Args:
+            dto_json: JSON string encoding a :class:`SchemaOperationsMessage`.
+                Sourced directly from ``extract_dto_json`` via its plain
+                ``@task`` XCom for the same reason as ``drop_and_recreate_schema``
+                — K8s pod return values are discarded to ``/dev/null``.
 
         Views created
         -------------
@@ -262,21 +288,31 @@ def repotracker_schema_reset_handler():
         """
         # Delegate to library helper so DAG stays a thin facade.
         import os
+        from horseless_repotracker.repotracker.dto import SchemaOperationsMessage
         from horseless_repotracker.repotracker.schema import create_materialized_views as _create_mvs
 
+        msg = SchemaOperationsMessage.from_json(dto_json)
+        database_name = msg.database_name
+
         user = os.getenv("PG_USER", "postgres")
-        password = os.getenv("PG_PASSWORD", "")
+        password = os.getenv("PG_PASSWORD", "postgres")  # match build_venv_env_vars default; "" is falsy
         host = os.getenv("PG_HOST", "localhost")
         port = int(os.getenv("PG_PORT", "5432"))
 
         _create_mvs(database_name, user=user, password=password, host=host, port=port)
 
     # --- task chain -------------------------------------------------------
-    dto_json = extract_dto_json()
-    db_name  = create_database_if_not_exists(dto_json)
-    schema   = drop_and_recreate_schema(db_name)
-    mv_task  = create_materialized_views(schema)
-    schema >> mv_task
+    # NOTE: All downstream Kubernetes tasks receive dto_json directly from the
+    # plain @task extract_dto_json (reliable XCom) rather than chaining on
+    # @task.kubernetes return values.  The Kubernetes task runner writes its
+    # output to /dev/null, so pod return values are never pushed to XCom and
+    # arrive as None in downstream tasks.  Explicit ordering edges preserve
+    # the required create-before-drop-before-views sequence.
+    dto_json   = extract_dto_json()
+    db_created = create_database_if_not_exists(dto_json)
+    schema     = drop_and_recreate_schema(dto_json)
+    mv_task    = create_materialized_views(dto_json)
+    db_created >> schema >> mv_task
 
 
 repotracker_schema_reset_handler()

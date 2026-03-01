@@ -80,7 +80,7 @@ def repotracker_schema_reset():
         get_logs=True,
         is_delete_operator_pod=False
     )
-    def publish_schema_reset_message(database_name: str) -> int:
+    def publish_schema_reset_message(database_name: str) -> None:
         """Publish a :class:`SchemaOperationsMessage` to the schema_reset channel.
 
         Constructs a :class:`SchemaOperationsMessage` for *database_name* and
@@ -92,8 +92,11 @@ def repotracker_schema_reset():
             database_name: Target PostgreSQL database to reset.
 
         Returns:
-            Redis subscriber count at publish time (``0`` means no consumer
-            was listening; the handler DAG may not have been running).
+            None.  The Redis subscriber count is logged to stdout rather than
+            returned — ``@task.kubernetes`` pods write return values to
+            ``/dev/null`` so the return value would be silently discarded.
+            A subscriber count of ``0`` means no consumer was listening;
+            the handler DAG may not have been running.
 
         Raises:
             redis.RedisError: On any underlying Redis connection or protocol
@@ -105,7 +108,16 @@ def repotracker_schema_reset():
         msg = SchemaOperationsMessage(database_name=database_name)
         with RedisTransport() as transport:
             subscriber_count = transport.publish_schema_reset(msg)
-        return subscriber_count
+        if subscriber_count == 0:
+            print(
+                f"[publish_schema_reset_message] WARNING: published schema reset for '{database_name}' "
+                f"but subscriber_count=0 — handler DAG may not be running"
+            )
+        else:
+            print(
+                f"[publish_schema_reset_message] published schema reset for '{database_name}'; "
+                f"subscriber_count={subscriber_count}"
+            )
 
     # --- task chain -------------------------------------------------------
     db_name = resolve_database_name()
