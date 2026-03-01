@@ -78,9 +78,9 @@ def repotracker_schema_reset():
         env_vars=_VENV_ENV_VARS,
         image_pull_policy="IfNotPresent",
         startup_timeout_seconds=600,
+        get_logs=True,
+        is_delete_operator_pod=False,
         resources={
-            "request_cpu": "200m",
-            "request_memory": "1Gi",
             "limit_cpu": "1",
             "limit_memory": "2Gi",
         },
