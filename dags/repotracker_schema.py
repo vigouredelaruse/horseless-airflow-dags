@@ -175,7 +175,7 @@ def repotracker_schema_reset_handler():
         get_logs=True,
         is_delete_operator_pod=False
     )
-    def drop_and_recreate_schema(database_name: str) -> None:
+    def drop_and_recreate_schema(database_name: str) -> str:
         """Destructively drop and re-create the target database schema.
 
         Sequence:
@@ -222,6 +222,7 @@ def repotracker_schema_reset_handler():
         db_url = f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{database_name}"
         orm = PersistenceSQLAlchemy(db_url=db_url)
         orm.shutdown()
+        return database_name
 
     @task.kubernetes(
         task_id="create_materialized_views",
@@ -276,7 +277,7 @@ def repotracker_schema_reset_handler():
     dto_json = extract_dto_json()
     db_name  = create_database_if_not_exists(dto_json)
     schema   = drop_and_recreate_schema(db_name)
-    mv_task  = create_materialized_views(db_name)
+    mv_task  = create_materialized_views(schema)
     schema >> mv_task
 
 
