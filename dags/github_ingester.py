@@ -311,7 +311,7 @@ def github_ingester():
         from horseless_repotracker.repotracker.ingestion import IssueIngestor
         from horseless_repotracker.repotracker.orm import ModelRunParameterORM, RepositoryORM
         from horseless_repotracker.repotracker.persistence_sqlalchemy import PersistenceSQLAlchemy
-        from horseless_repotracker.repotracker.sqlalchemy_model import Issue, Label, Repository, User
+        from horseless_repotracker.repotracker.sqlalchemy_model import Issue, Label, Repository, User, ModelRun
         from horseless_repotracker.repotracker.dto import ModelRunDTO
         logger = logging.getLogger(__name__)
 
