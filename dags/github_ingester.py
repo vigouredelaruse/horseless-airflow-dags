@@ -439,7 +439,6 @@ def github_ingester():
         name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
         image_pull_policy="IfNotPresent",
-        system_site_packages=True,
         get_logs=True,
         is_delete_operator_pod=False,
     )
