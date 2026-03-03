@@ -15,12 +15,12 @@ from horseless_dag_env import DEFAULT_ARGS, VENV_REQUIREMENTS, VENV_PIP_OPTIONS,
         "model_run": Param(
             {
                 "repos": ["owner/repo"],
-                "start_date": "2024-01-01",
-                "end_date": "2024-12-31",
+                "start_date": "2026-01-01",
+                "end_date": "2026-01-07",
                 "model_name": "example-run",
                 "token": None,
                 "keyword": "",
-                "output_dir": None,
+                "output_dir": "example-run-outputs",
                 "reset_if_exists": True,
                 "model_run_id": None,
                 "spectral_config": {
@@ -48,10 +48,13 @@ def modelrun_starter():
     `ModelRunDTO` and calls `RedisTransport.publish_model_run_dto()`.
     """
 
-    @task.virtualenv(
+    @task.kubernetes(
         task_id="publish_modelrun",
-        requirements=VENV_REQUIREMENTS,
-        pip_install_options=VENV_PIP_OPTIONS,
+        image="thehorselessnewspaper/horseless-repotracker@sha256:c9d9674c791fbf77b8bb75cef8adaa6f381b5f5dbc93761affa69bfb96228b63",
+        name="modelrun_starter",   
+        get_logs=True,
+        is_delete_operator_pod=False,        
+        image_pull_policy="IfNotPresent",
         env_vars=build_venv_env_vars(include_redis=True),
     )
     def publish_modelrun(**context) -> int:
