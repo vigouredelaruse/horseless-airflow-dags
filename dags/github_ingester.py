@@ -133,8 +133,7 @@ def github_ingester():
         image="thehorselessnewspaper/horseless-repotracker@sha256:c9d9674c791fbf77b8bb75cef8adaa6f381b5f5dbc93761affa69bfb96228b63",
         name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
-        image_pull_policy="IfNotPresent",
-        system_site_packages=True,
+        image_pull_policy="IfNotPresent", 
         get_logs=True,
         is_delete_operator_pod=False,
     )
@@ -264,15 +263,14 @@ def github_ingester():
         # NOTE: Kubernetes task runner discards return values to /dev/null,
         # so we intentionally do not return model_run_id. Downstream tasks
         # derive or re-upsert the same ModelRun to obtain the id when needed.
-        return None
+        return model_run_id
 
     @task.kubernetes(
         task_id="ingest_repositories",
         image="thehorselessnewspaper/horseless-repotracker@sha256:c9d9674c791fbf77b8bb75cef8adaa6f381b5f5dbc93761affa69bfb96228b63",
         name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
-        image_pull_policy="IfNotPresent",
-        system_site_packages=True,
+        image_pull_policy="IfNotPresent", 
         get_logs=True,
         is_delete_operator_pod=False,
     )
@@ -393,8 +391,48 @@ def github_ingester():
         ingested = asyncio.run(_ingest())
         print(f"[ingest_repositories] ingested {len(ingested)} repositories")
         # Do not return the list — Kubernetes pods discard return values to /dev/null.
-        return None
+        return ingested
 
+    @task.kubernetes(
+        task_id="refresh_materialized_views",
+        image="thehorselessnewspaper/horseless-repotracker@sha256:c9d9674c791fbf77b8bb75cef8adaa6f381b5f5dbc93761affa69bfb96228b63",
+        name="k8s-env-task",
+        env_vars=_VENV_ENV_VARS,
+        image_pull_policy="IfNotPresent",
+        get_logs=True,
+        is_delete_operator_pod=False,
+    )
+    def ingest_issues(dto_json: str, ingested: list) -> None:
+        """Ingest issues for the repositories ingested by the previous task.
+
+        For each repository ingested by ``ingest_repositories``, streams issues
+        through :class:`IssueIngestor` and persists them to PostgreSQL.
+
+        Args:
+            model_run_id: The ``model_run.id`` returned by ``persist_model_run``."""
+        import asyncio
+        import logging
+
+        from horseless_repotracker.repotracker.ingestion import IssueIngestor
+
+        logger = logging.getLogger(__name__)
+
+        async def _ingest_issues():
+            dto = ModelRunDTO.from_json(dto_json)
+            token = dto.token
+            ingestor = IssueIngestor(github_token=token)
+            for repository in ingested:
+                repo_full_name = repository.full_name
+                logger.info("Starting issue ingestion for repository: %s", repo_full_name)
+                async for issue_result in ingestor.stream_issues_for_repository(repository):
+                    # Persist issue_result to PostgreSQL (not implemented here).
+                    logger.info("Ingested issue #%s from %s", issue_result.issue_number, repo_full_name)
+
+        asyncio.run(_ingest_issues())
+        print("[ingest_issues] completed issue ingestion")
+        return dto_json  # Forward DTO JSON for downstream tasks that need it.     
+    
+    
     @task.kubernetes(
         task_id="refresh_materialized_views",
         image="thehorselessnewspaper/horseless-repotracker@sha256:c9d9674c791fbf77b8bb75cef8adaa6f381b5f5dbc93761affa69bfb96228b63",
@@ -530,6 +568,14 @@ def github_ingester():
             count,
         )
         print(f"[publish_enrichment_trigger] published model_run_id={model_run_id} subscriber_count={count}")
+        
+        count = transport.publish_gpu_enrichment_trigger(model_run_id)
+        logger.info(
+            "Published GPU enrichment trigger model_run_id=%d to %d subscriber(s).",
+            model_run_id,
+            count,
+        )
+        print(f"[publish_gpu_enrichment_trigger] published model_run_id={model_run_id} subscriber_count={count}")
         return None
 
     # -----------------------------------------------------------------------
@@ -539,12 +585,13 @@ def github_ingester():
     # Fan-out dto_json to Kubernetes tasks. Persist/ingest/refresh/publish
     # do not rely on K8s-to-K8s XCom return values — they are discarded.
     persist = persist_model_run(dto_json)
-    ingested = ingest_repositories(dto_json)
+    repositories = ingest_repositories(dto_json)
+    issues = ingest_issues(dto_json, ingested)
     refreshed = refresh_materialized_views(dto_json)
     published = publish_enrichment_trigger(dto_json)
 
     # Enforce ordering explicitly via task edges
-    persist >> ingested >> refreshed >> published
+    persist >> repositories >> issues >> refreshed >> published
 
 
 github_ingester()

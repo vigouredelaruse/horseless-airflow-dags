@@ -126,6 +126,7 @@ def build_venv_env_vars(*, include_redis: bool = True) -> dict[str, str]:
             # Enrichment trigger channel — published by github_ingester after
             # materialised-view refresh; consumed by enrichment_handler DAG.
             "REDIS_PUBSUB_ENRICHMENT_CHANNEL":       Variable.get("REDIS_PUBSUB_ENRICHMENT_CHANNEL",       default="modelrun_enriched"),
+            "REDIS_PUBSUB_GPU_ENRICHMENT_CHANNEL":   Variable.get("REDIS_PUBSUB_GPU_ENRICHMENT_CHANNEL",   default="modelrun_enriched_gpu"),
         })
 
     return env_vars
