@@ -3,7 +3,7 @@ from __future__ import annotations
 from airflow.models.param import Param
 from airflow.sdk import dag, task
 
-from horseless_dag_env import DEFAULT_ARGS
+from horseless_dag_env import DEFAULT_ARGS, VENV_REQUIREMENTS, VENV_PIP_OPTIONS, build_venv_env_vars
 
 
 @dag(
@@ -48,7 +48,12 @@ def modelrun_starter():
     `ModelRunDTO` and calls `RedisTransport.publish_model_run_dto()`.
     """
 
-    @task(task_id="publish_modelrun")
+    @task.virtualenv(
+        task_id="publish_modelrun",
+        requirements=VENV_REQUIREMENTS,
+        pip_install_options=VENV_PIP_OPTIONS,
+        env_vars=build_venv_env_vars(include_redis=True),
+    )
     def publish_modelrun(**context) -> int:
         from horseless_repotracker.repotracker.dto import ModelRunDTO, SpectralConfigDTO
         from horseless_repotracker.repotracker.redistransport.redis_transport import RedisTransport
