@@ -274,7 +274,7 @@ def github_ingester():
         get_logs=True,
         is_delete_operator_pod=False,
     )
-    def ingest_repositories(dto_json: str) -> None:
+    def ingest_repositories(dto_json: str) -> list:
         """Stream repositories from the ModelRunParameter and ingest issues.
 
         For each ``owner/repo`` string in :attr:`ModelRunParameter.repos`:
@@ -388,10 +388,10 @@ def github_ingester():
             finally:
                 await engine.dispose()
 
-        ingested = asyncio.run(_ingest())
+        repositories = asyncio.run(_ingest())
         print(f"[ingest_repositories] ingested {len(ingested)} repositories")
         # Do not return the list — Kubernetes pods discard return values to /dev/null.
-        return ingested
+        return repositories
 
     @task.kubernetes(
         task_id="refresh_materialized_views",
@@ -402,7 +402,7 @@ def github_ingester():
         get_logs=True,
         is_delete_operator_pod=False,
     )
-    def ingest_issues(dto_json: str, ingested: list) -> None:
+    def ingest_issues(dto_json: str, repositories: list) -> None:
         """Ingest issues for the repositories ingested by the previous task.
 
         For each repository ingested by ``ingest_repositories``, streams issues
@@ -421,7 +421,7 @@ def github_ingester():
             dto = ModelRunDTO.from_json(dto_json)
             token = dto.token
             ingestor = IssueIngestor(github_token=token)
-            for repository in ingested:
+            for repository in repositories:
                 repo_full_name = repository.full_name
                 logger.info("Starting issue ingestion for repository: %s", repo_full_name)
                 async for issue_result in ingestor.stream_issues_for_repository(repository):
@@ -584,9 +584,9 @@ def github_ingester():
     dto_json = extract_dto_json()
     # Fan-out dto_json to Kubernetes tasks. Persist/ingest/refresh/publish
     # do not rely on K8s-to-K8s XCom return values — they are discarded.
-    persist = persist_model_run(dto_json)
+    model_run_id = persist_model_run(dto_json)
     repositories = ingest_repositories(dto_json)
-    issues = ingest_issues(dto_json, ingested)
+    issues = ingest_issues(dto_json, repositories)
     refreshed = refresh_materialized_views(dto_json)
     published = publish_enrichment_trigger(dto_json)
 
