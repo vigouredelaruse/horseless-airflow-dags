@@ -162,6 +162,8 @@ def github_ingester():
             The ``model_run.id`` of the newly created (or updated) run.
         """
         import asyncio
+        import json
+        import os
         from datetime import datetime
 
         from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -262,8 +264,6 @@ def github_ingester():
         print(f"[persist_model_run] upserted model_run_id={model_run_id}")
         
         # Write to XCom for Kubernetes pod-to-pod communication
-        import json
-        import os
         os.makedirs('/airflow/xcom', exist_ok=True)
         with open('/airflow/xcom/return.json', 'w') as f:
             json.dump(model_run_id, f)
@@ -407,7 +407,7 @@ def github_ingester():
         return repo_list
 
     @task.kubernetes(
-        task_id="refresh_materialized_views",
+        task_id="ingest_issues",
         image="thehorselessnewspaper/horseless-repotracker@sha256:ae758925e003993c1f665dbf1e8f00de7ec54dd99b0ed533a2f6d9bb5c7e2ad1",
         name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
@@ -422,34 +422,119 @@ def github_ingester():
         through :class:`IssueIngestor` and persists them to PostgreSQL.
 
         Args:
-            model_run_id: The ``model_run.id`` returned by ``persist_model_run``."""
+            dto_json: JSON-serialized ModelRunDTO containing token and date range.
+            repositories: List of repository full_name strings (e.g., ["owner/repo1", "owner/repo2"]).
+        """
         import asyncio
+        import json
         import logging
+        import os
+        from datetime import datetime
 
-        from horseless_repotracker.repotracker.ingestion import IssueIngestor
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-        from horseless_repotracker.repotracker.github_api import GitHubAPI
-        from horseless_repotracker.repotracker.ingestion import IssueIngestor
-        from horseless_repotracker.repotracker.orm import ModelRunParameterORM, RepositoryORM
-        from horseless_repotracker.repotracker.persistence_sqlalchemy import PersistenceSQLAlchemy
-        from horseless_repotracker.repotracker.sqlalchemy_model import Issue, Label, Repository, User
         from horseless_repotracker.repotracker.dto import ModelRunDTO
+        from horseless_repotracker.repotracker.ingestion import IssueIngestor
+        from horseless_repotracker.repotracker.orm import (
+            IssueORM,
+            LabelORM,
+            ModelRunORM,
+            RepositoryORM,
+            UserORM,
+        )
+        from horseless_repotracker.repotracker.persistence_sqlalchemy import PersistenceSQLAlchemy
+        from horseless_repotracker.repotracker.sqlalchemy_model import Issue, Label, ModelRun, Repository, User
+
         logger = logging.getLogger(__name__)
 
         async def _ingest_issues():
+            # Deserialize DTO to get token, model_run_id, and date range
             dto = ModelRunDTO.from_json(dto_json)
-            token = dto.token
-            ingestor = IssueIngestor(github_token=token)
-            for repository in repositories:
-                repo_full_name = repository.full_name
-                logger.info("Starting issue ingestion for repository: %s", repo_full_name)
-                async for issue_result in ingestor.stream_issues_for_repository(repository):
-                    # Persist issue_result to PostgreSQL (not implemented here).
-                    logger.info("Ingested issue #%s from %s", issue_result.issue_number, repo_full_name)
+            token = dto.token or os.environ.get("GITHUB_TOKEN", "")
+            start_date = dto.start_date
+            end_date = dto.end_date
+            keyword = dto.keyword
+
+            # Set up database connection
+            url = PersistenceSQLAlchemy.get_async_postgres_db_url()
+            engine = create_async_engine(url, echo=False)
+            sf = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+
+            try:
+                # Derive model_run_id from DTO (may need to upsert ModelRun)
+                mr_table = ModelRun.__table__
+                model_run_kwargs = {}
+                for col in mr_table.columns:
+                    if col.name == "xmin":
+                        continue
+                    if col.name == "started_at":
+                        model_run_kwargs["started_at"] = datetime.utcnow()
+                        continue
+                    if hasattr(dto, col.name):
+                        model_run_kwargs[col.name] = getattr(dto, col.name)
+                model_run = ModelRun(**model_run_kwargs)
+                model_run_id = await ModelRunORM(sf).upsert(model_run)
+
+                # Set up ORM helpers
+                repo_orm = RepositoryORM(sf)
+                issue_orm = IssueORM(sf)
+                user_orm = UserORM(sf)
+                label_orm = LabelORM(sf)
+
+                # Create IssueIngestor
+                ingestor = IssueIngestor(github_token=token)
+
+                # Process each repository
+                for repo_full_name in repositories:  # repositories is a list of strings
+                    logger.info("Starting issue ingestion for repository: %s", repo_full_name)
+
+                    # Look up the Repository object from the database
+                    repository = await repo_orm.get_by_full_name(repo_full_name, model_run_id)
+                    if repository is None:
+                        logger.warning(
+                            "Repository %s not found in database for model_run_id=%d, skipping",
+                            repo_full_name,
+                            model_run_id,
+                        )
+                        continue
+
+                    # Stream issues using IssueIngestor
+                    issue_count = 0
+                    async for issue_result in ingestor.stream(
+                        repository=repository,
+                        model_run_id=model_run_id,
+                        start_date=start_date,
+                        end_date=end_date,
+                        keyword=keyword,
+                    ):
+                        # Persist users first (foreign key dependency)
+                        for user in issue_result.users:
+                            await user_orm.upsert(user)
+
+                        # Persist labels
+                        for label in issue_result.labels:
+                            await label_orm.upsert(label)
+
+                        # Persist the issue
+                        await issue_orm.upsert(issue_result.issue)
+
+                        issue_count += 1
+                        if issue_count % 100 == 0:
+                            logger.info("Ingested %d issues from %s", issue_count, repo_full_name)
+
+                    logger.info(
+                        "Completed issue ingestion for %s: %d issues total",
+                        repo_full_name,
+                        issue_count,
+                    )
+
+            finally:
+                await engine.dispose()
 
         asyncio.run(_ingest_issues())
         print("[ingest_issues] completed issue ingestion")
-        return dto_json  # Forward DTO JSON for downstream tasks that need it.     
+        return None     
     
     
     @task.kubernetes(
