@@ -312,7 +312,7 @@ def github_ingester():
         from horseless_repotracker.repotracker.orm import ModelRunParameterORM, RepositoryORM
         from horseless_repotracker.repotracker.persistence_sqlalchemy import PersistenceSQLAlchemy
         from horseless_repotracker.repotracker.sqlalchemy_model import Issue, Label, Repository, User
-
+        from horseless_repotracker.repotracker.dto import ModelRunDTO
         logger = logging.getLogger(__name__)
 
         async def _stream_repositories(repos, token, sf, model_run_id):
@@ -428,6 +428,12 @@ def github_ingester():
 
         from horseless_repotracker.repotracker.ingestion import IssueIngestor
 
+        from horseless_repotracker.repotracker.github_api import GitHubAPI
+        from horseless_repotracker.repotracker.ingestion import IssueIngestor
+        from horseless_repotracker.repotracker.orm import ModelRunParameterORM, RepositoryORM
+        from horseless_repotracker.repotracker.persistence_sqlalchemy import PersistenceSQLAlchemy
+        from horseless_repotracker.repotracker.sqlalchemy_model import Issue, Label, Repository, User
+        from horseless_repotracker.repotracker.dto import ModelRunDTO
         logger = logging.getLogger(__name__)
 
         async def _ingest_issues():
@@ -545,6 +551,13 @@ def github_ingester():
 
         from horseless_repotracker.repotracker.redistransport import RedisTransport
 
+        from horseless_repotracker.repotracker.github_api import GitHubAPI
+        from horseless_repotracker.repotracker.ingestion import IssueIngestor
+        from horseless_repotracker.repotracker.orm import ModelRunParameterORM, RepositoryORM
+        from horseless_repotracker.repotracker.persistence_sqlalchemy import PersistenceSQLAlchemy
+        from horseless_repotracker.repotracker.sqlalchemy_model import Issue, Label, Repository, User
+        from horseless_repotracker.repotracker.dto import ModelRunDTO
+        
         logger = logging.getLogger(__name__)
         dto = ModelRunDTO.from_json(dto_json)
         model_run_id = dto.model_run_id
