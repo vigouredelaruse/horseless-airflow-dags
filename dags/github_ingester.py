@@ -260,9 +260,14 @@ def github_ingester():
 
         model_run_id = asyncio.run(_persist())
         print(f"[persist_model_run] upserted model_run_id={model_run_id}")
-        # NOTE: Kubernetes task runner discards return values to /dev/null,
-        # so we intentionally do not return model_run_id. Downstream tasks
-        # derive or re-upsert the same ModelRun to obtain the id when needed.
+        
+        # Write to XCom for Kubernetes pod-to-pod communication
+        import json
+        import os
+        os.makedirs('/airflow/xcom', exist_ok=True)
+        with open('/airflow/xcom/return.json', 'w') as f:
+            json.dump(model_run_id, f)
+        
         return model_run_id
 
     @task.kubernetes(
@@ -389,9 +394,17 @@ def github_ingester():
                 await engine.dispose()
 
         repositories = asyncio.run(_ingest())
-        print(f"[ingest_repositories] ingested {len(ingested)} repositories")
-        # Do not return the list — Kubernetes pods discard return values to /dev/null.
-        return repositories
+        print(f"[ingest_repositories] ingested {len(repositories)} repositories")
+        
+        # Write to XCom for Kubernetes pod-to-pod communication
+        import json
+        import os
+        repo_list = [repo.full_name for repo in repositories]
+        os.makedirs('/airflow/xcom', exist_ok=True)
+        with open('/airflow/xcom/return.json', 'w') as f:
+            json.dump(repo_list, f)
+        
+        return repo_list
 
     @task.kubernetes(
         task_id="refresh_materialized_views",
@@ -590,7 +603,7 @@ def github_ingester():
     published = publish_enrichment_trigger(dto_json)
 
     # Enforce ordering explicitly via task edges
-    persist >> repositories >> issues >> refreshed >> published
+    model_run_id >> repositories >> issues >> refreshed >> published
 
 
 github_ingester()
