@@ -300,19 +300,21 @@ def github_ingester():
             ingested (``["owner/repo", ...]``).
         """
         import asyncio
+        import json
         import logging
         import os
+        from datetime import datetime
 
         import aiohttp
         from sqlalchemy.dialects.postgresql import insert as pg_insert
         from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+        from horseless_repotracker.repotracker.dto import ModelRunDTO
         from horseless_repotracker.repotracker.github_api import GitHubAPI
         from horseless_repotracker.repotracker.ingestion import IssueIngestor
-        from horseless_repotracker.repotracker.orm import ModelRunParameterORM, RepositoryORM
+        from horseless_repotracker.repotracker.orm import ModelRunORM, ModelRunParameterORM, RepositoryORM
         from horseless_repotracker.repotracker.persistence_sqlalchemy import PersistenceSQLAlchemy
         from horseless_repotracker.repotracker.sqlalchemy_model import Issue, Label, Repository, User, ModelRun
-        from horseless_repotracker.repotracker.dto import ModelRunDTO
         logger = logging.getLogger(__name__)
 
         async def _stream_repositories(repos, token, sf, model_run_id):
@@ -397,8 +399,6 @@ def github_ingester():
         print(f"[ingest_repositories] ingested {len(repositories)} repositories")
         
         # Write to XCom for Kubernetes pod-to-pod communication
-        import json
-        import os
         repo_list = [repo.full_name for repo in repositories]
         os.makedirs('/airflow/xcom', exist_ok=True)
         with open('/airflow/xcom/return.json', 'w') as f:
@@ -547,16 +547,17 @@ def github_ingester():
         Returns:
             The number of Redis Pub/Sub subscribers that received the message.
         """
+        import asyncio
         import logging
+        from datetime import datetime
 
-        from horseless_repotracker.repotracker.redistransport import RedisTransport
+        from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-        from horseless_repotracker.repotracker.github_api import GitHubAPI
-        from horseless_repotracker.repotracker.ingestion import IssueIngestor
-        from horseless_repotracker.repotracker.orm import ModelRunParameterORM, RepositoryORM
-        from horseless_repotracker.repotracker.persistence_sqlalchemy import PersistenceSQLAlchemy
-        from horseless_repotracker.repotracker.sqlalchemy_model import Issue, Label, Repository, User
         from horseless_repotracker.repotracker.dto import ModelRunDTO
+        from horseless_repotracker.repotracker.orm import ModelRunORM
+        from horseless_repotracker.repotracker.persistence_sqlalchemy import PersistenceSQLAlchemy
+        from horseless_repotracker.repotracker.redistransport import RedisTransport
+        from horseless_repotracker.repotracker.sqlalchemy_model import ModelRun
         
         logger = logging.getLogger(__name__)
         dto = ModelRunDTO.from_json(dto_json)
