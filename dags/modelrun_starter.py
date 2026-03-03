@@ -50,7 +50,7 @@ def modelrun_starter():
 
     @task.kubernetes(
         task_id="publish_modelrun",
-        image="thehorselessnewspaper/horseless-repotracker@sha256:c9d9674c791fbf77b8bb75cef8adaa6f381b5f5dbc93761affa69bfb96228b63",
+        image="thehorselessnewspaper/horseless-repotracker@sha256:ae758925e003993c1f665dbf1e8f00de7ec54dd99b0ed533a2f6d9bb5c7e2ad1",
         name="modelrun_starter",   
         get_logs=True,
         is_delete_operator_pod=False,        
