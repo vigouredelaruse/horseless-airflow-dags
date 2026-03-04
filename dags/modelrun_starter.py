@@ -14,7 +14,7 @@ from horseless_dag_env import DEFAULT_ARGS, VENV_REQUIREMENTS, VENV_PIP_OPTIONS,
     params={
         "model_run": Param(
             {
-                "repos": ["owner/repo"],
+                "repos": ["dotnet/aspire"],
                 "start_date": "2026-01-01",
                 "end_date": "2026-01-07",
                 "model_name": "example-run",
