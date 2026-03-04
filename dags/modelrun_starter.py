@@ -48,9 +48,26 @@ def modelrun_starter():
     `ModelRunDTO` and calls `RedisTransport.publish_model_run_dto()`.
     """
 
+    @task(task_id="extract_params")
+    def extract_params(**context) -> str:
+        """Extract DAG params and serialize to JSON for the Kubernetes task.
+        
+        Kubernetes tasks don't reliably receive the full context with params,
+        so we extract them in a lightweight task and pass as a JSON string.
+        """
+        import json
+        
+        params = context.get("params", {})
+        model_run_payload = params.get("model_run", {})
+        
+        # Log for debugging
+        print(f"[extract_params] Extracted params: {model_run_payload}")
+        
+        return json.dumps(model_run_payload)
+
     @task.kubernetes(
         task_id="publish_modelrun",
-        image="thehorselessnewspaper/horseless-repotracker@sha256:ae758925e003993c1f665dbf1e8f00de7ec54dd99b0ed533a2f6d9bb5c7e2ad1",
+        image="thehorselessnewspaper/horseless-repotracker@sha256:3e7706e7709beb835664e613a72d3215c529013c16ab2b2f3c2dbefa4eef2bb0",
         name="modelrun_starter",   
         get_logs=True,
         startup_timeout_seconds=600,
@@ -58,12 +75,15 @@ def modelrun_starter():
         image_pull_policy="IfNotPresent",
         env_vars=build_venv_env_vars(include_redis=True),
     )
-    def publish_modelrun(**context) -> int:
+    def publish_modelrun(model_run_json: str) -> int:
+        """Publish ModelRunDTO to Redis from the serialized params JSON."""
+        import json
         from horseless_repotracker.repotracker.dto import ModelRunDTO, SpectralConfigDTO
         from horseless_repotracker.repotracker.redistransport.redis_transport import RedisTransport
 
-        params = context.get("params", {})
-        model_run_payload = params.get("model_run", {})
+        model_run_payload = json.loads(model_run_json)
+        
+        print(f"[publish_modelrun] Received payload: {model_run_payload}")
 
         # Ensure spectral_config is a SpectralConfigDTO
         sc = model_run_payload.get("spectral_config")
@@ -84,12 +104,18 @@ def modelrun_starter():
             spectral_config=model_run_payload.get("spectral_config"),
         )
 
+        print(f"[publish_modelrun] Built DTO: repos={dto.repos}, start_date={dto.start_date}, end_date={dto.end_date}")
+
         transport = RedisTransport()
         count = transport.publish_model_run_dto(dto)
         transport.close()
+        
+        print(f"[publish_modelrun] Published to {count} subscriber(s)")
         return count
 
-    publish_modelrun()
+    # Task chain: extract params first, then publish
+    params_json = extract_params()
+    publish_modelrun(params_json)
 
 
 modelrun_starter()
