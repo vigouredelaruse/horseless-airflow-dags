@@ -130,7 +130,7 @@ def github_ingester():
 
     @task.kubernetes(
         task_id="persist_model_run",
-        image="thehorselessnewspaper/horseless-repotracker@sha256:ae758925e003993c1f665dbf1e8f00de7ec54dd99b0ed533a2f6d9bb5c7e2ad1",
+        image="thehorselessnewspaper/horseless-repotracker@sha256:aedc8c1e98fd49b1f2aaf552c1021dff8e1dad9aaadc47717c85cb9ec55d6e86",
         name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
         image_pull_policy="IfNotPresent", 
@@ -272,7 +272,7 @@ def github_ingester():
 
     @task.kubernetes(
         task_id="ingest_repositories",
-        image="thehorselessnewspaper/horseless-repotracker@sha256:ae758925e003993c1f665dbf1e8f00de7ec54dd99b0ed533a2f6d9bb5c7e2ad1",
+        image="thehorselessnewspaper/horseless-repotracker@sha256:aedc8c1e98fd49b1f2aaf552c1021dff8e1dad9aaadc47717c85cb9ec55d6e86",
         name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
         image_pull_policy="IfNotPresent", 
@@ -408,7 +408,7 @@ def github_ingester():
 
     @task.kubernetes(
         task_id="ingest_issues",
-        image="thehorselessnewspaper/horseless-repotracker@sha256:ae758925e003993c1f665dbf1e8f00de7ec54dd99b0ed533a2f6d9bb5c7e2ad1",
+        image="thehorselessnewspaper/horseless-repotracker@sha256:aedc8c1e98fd49b1f2aaf552c1021dff8e1dad9aaadc47717c85cb9ec55d6e86",
         name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
         image_pull_policy="IfNotPresent",
@@ -539,7 +539,7 @@ def github_ingester():
     
     @task.kubernetes(
         task_id="refresh_materialized_views",
-        image="thehorselessnewspaper/horseless-repotracker@sha256:ae758925e003993c1f665dbf1e8f00de7ec54dd99b0ed533a2f6d9bb5c7e2ad1",
+        image="thehorselessnewspaper/horseless-repotracker@sha256:aedc8c1e98fd49b1f2aaf552c1021dff8e1dad9aaadc47717c85cb9ec55d6e86",
         name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
         image_pull_policy="IfNotPresent",
@@ -607,7 +607,7 @@ def github_ingester():
 
     @task.kubernetes(
         task_id="publish_enrichment_trigger",
-        image="thehorselessnewspaper/horseless-repotracker@sha256:ae758925e003993c1f665dbf1e8f00de7ec54dd99b0ed533a2f6d9bb5c7e2ad1",
+        image="thehorselessnewspaper/horseless-repotracker@sha256:aedc8c1e98fd49b1f2aaf552c1021dff8e1dad9aaadc47717c85cb9ec55d6e86",
         name="k8s-env-task",
         env_vars=build_venv_env_vars(include_redis=True),
         image_pull_policy="IfNotPresent",
