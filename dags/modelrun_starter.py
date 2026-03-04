@@ -53,7 +53,7 @@ def modelrun_starter():
         image="thehorselessnewspaper/horseless-repotracker@sha256:ae758925e003993c1f665dbf1e8f00de7ec54dd99b0ed533a2f6d9bb5c7e2ad1",
         name="modelrun_starter",   
         get_logs=True,
-        startup_timeout_seconds=300,
+        startup_timeout_seconds=600,
         is_delete_operator_pod=False,        
         image_pull_policy="IfNotPresent",
         env_vars=build_venv_env_vars(include_redis=True),
