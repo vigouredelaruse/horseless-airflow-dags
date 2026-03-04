@@ -134,6 +134,7 @@ def github_ingester():
         name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
         image_pull_policy="IfNotPresent", 
+        startup_timeout_seconds=300,
         get_logs=True,
         is_delete_operator_pod=False,
     )
@@ -276,6 +277,7 @@ def github_ingester():
         name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
         image_pull_policy="IfNotPresent", 
+        startup_timeout_seconds=300,
         get_logs=True,
         is_delete_operator_pod=False,
     )
@@ -412,6 +414,7 @@ def github_ingester():
         name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
         image_pull_policy="IfNotPresent",
+        startup_timeout_seconds=300,
         get_logs=True,
         is_delete_operator_pod=False,
     )
@@ -543,6 +546,7 @@ def github_ingester():
         name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
         image_pull_policy="IfNotPresent",
+        startup_timeout_seconds=300,
         get_logs=True,
         is_delete_operator_pod=False,
     )
@@ -611,6 +615,7 @@ def github_ingester():
         name="k8s-env-task",
         env_vars=build_venv_env_vars(include_redis=True),
         image_pull_policy="IfNotPresent",
+        startup_timeout_seconds=300,
         get_logs=True,
         is_delete_operator_pod=False,
     )
