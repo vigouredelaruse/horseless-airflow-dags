@@ -639,6 +639,7 @@ def github_ingester():
         """
         import asyncio
         import logging
+        import os
         from datetime import datetime
 
         from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -676,6 +677,8 @@ def github_ingester():
             finally:
                 asyncio.run(engine.dispose())
 
+        import os
+        
         transport = RedisTransport()
         count = transport.publish_enrichment_trigger(model_run_id)
         logger.info(
@@ -685,13 +688,16 @@ def github_ingester():
         )
         print(f"[publish_enrichment_trigger] published model_run_id={model_run_id} subscriber_count={count}")
         
-        count = transport.publish_gpu_enrichment_trigger(model_run_id)
+        # Get GPU enrichment channel from environment
+        gpu_channel = os.getenv("REDIS_PUBSUB_GPU_ENRICHMENT_CHANNEL", "modelrun_enriched_gpu")
+        count = transport.publish_gpu_enrichment_trigger(gpu_enrichment_channel=gpu_channel, model_run_dto=dto)
         logger.info(
-            "Published GPU enrichment trigger model_run_id=%d to %d subscriber(s).",
+            "Published GPU enrichment trigger model_run_id=%d to %d subscriber(s) on channel=%s.",
             model_run_id,
             count,
+            gpu_channel,
         )
-        print(f"[publish_gpu_enrichment_trigger] published model_run_id={model_run_id} subscriber_count={count}")
+        print(f"[publish_gpu_enrichment_trigger] published model_run_id={model_run_id} subscriber_count={count} channel={gpu_channel}")
         return None
 
     # -----------------------------------------------------------------------

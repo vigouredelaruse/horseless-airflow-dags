@@ -440,3 +440,7 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# Airflow variables export (contains secrets)
+airflow_variables.json
+*_variables.json
