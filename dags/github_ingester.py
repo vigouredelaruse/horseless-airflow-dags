@@ -138,7 +138,7 @@ def github_ingester():
 
     @task.kubernetes(
         task_id="persist_model_run",
-        image="localhost:32000/horseless-repotracker:sha256:3e7706e7709beb835664e613a72d3215c529013c16ab2b2f3c2dbefa4eef2bb0",
+        image="localhost:32000/horseless-repotracker@sha256:3e7706e7709beb835664e613a72d3215c529013c16ab2b2f3c2dbefa4eef2bb0",
         name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
         image_pull_policy="IfNotPresent", 
@@ -281,7 +281,7 @@ def github_ingester():
 
     @task.kubernetes(
         task_id="ingest_repositories",
-        image="localhost:32000/horseless-repotracker:sha256:3e7706e7709beb835664e613a72d3215c529013c16ab2b2f3c2dbefa4eef2bb0",
+        image="localhost:32000/horseless-repotracker@sha256:3e7706e7709beb835664e613a72d3215c529013c16ab2b2f3c2dbefa4eef2bb0",
         name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
         image_pull_policy="IfNotPresent", 
@@ -418,7 +418,7 @@ def github_ingester():
 
     @task.kubernetes(
         task_id="ingest_issues",
-        image="localhost:32000/horseless-repotracker:sha256:3e7706e7709beb835664e613a72d3215c529013c16ab2b2f3c2dbefa4eef2bb0",
+        image="localhost:32000/horseless-repotracker@sha256:3e7706e7709beb835664e613a72d3215c529013c16ab2b2f3c2dbefa4eef2bb0",
         name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
         image_pull_policy="IfNotPresent",
@@ -550,7 +550,7 @@ def github_ingester():
     
     @task.kubernetes(
         task_id="refresh_materialized_views",
-        image="localhost:32000/horseless-repotracker:sha256:3e7706e7709beb835664e613a72d3215c529013c16ab2b2f3c2dbefa4eef2bb0",
+        image="localhost:32000/horseless-repotracker@sha256:3e7706e7709beb835664e613a72d3215c529013c16ab2b2f3c2dbefa4eef2bb0",
         name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
         image_pull_policy="IfNotPresent",
@@ -619,7 +619,7 @@ def github_ingester():
 
     @task.kubernetes(
         task_id="publish_enrichment_trigger",
-        image="localhost:32000/horseless-repotracker:sha256:3e7706e7709beb835664e613a72d3215c529013c16ab2b2f3c2dbefa4eef2bb0",
+        image="localhost:32000/horseless-repotracker@sha256:3e7706e7709beb835664e613a72d3215c529013c16ab2b2f3c2dbefa4eef2bb0",
         name="k8s-env-task",
         env_vars=build_venv_env_vars(include_redis=True),
         image_pull_policy="IfNotPresent",

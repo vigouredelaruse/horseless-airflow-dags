@@ -135,7 +135,7 @@ def repotracker_schema_reset_handler():
 
     @task.kubernetes(
         task_id="create_database_if_not_exists",
-        image="localhost:32000/horseless-repotracker:sha256:3e7706e7709beb835664e613a72d3215c529013c16ab2b2f3c2dbefa4eef2bb0",        name="k8s-env-task",
+        image="localhost:32000/horseless-repotracker@sha256:3e7706e7709beb835664e613a72d3215c529013c16ab2b2f3c2dbefa4eef2bb0",        name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
         image_pull_policy="IfNotPresent",
         startup_timeout_seconds=600, 
@@ -179,7 +179,7 @@ def repotracker_schema_reset_handler():
 
     @task.kubernetes(
         task_id="drop_and_recreate_schema",
-        image="localhost:32000/horseless-repotracker:sha256:3e7706e7709beb835664e613a72d3215c529013c16ab2b2f3c2dbefa4eef2bb0",        name="k8s-env-task",
+        image="localhost:32000/horseless-repotracker@sha256:3e7706e7709beb835664e613a72d3215c529013c16ab2b2f3c2dbefa4eef2bb0",        name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
         image_pull_policy="IfNotPresent", 
         get_logs=True,
@@ -243,7 +243,7 @@ def repotracker_schema_reset_handler():
 
     @task.kubernetes(
         task_id="create_materialized_views",
-        image="localhost:32000/horseless-repotracker:sha256:3e7706e7709beb835664e613a72d3215c529013c16ab2b2f3c2dbefa4eef2bb0",        name="k8s-env-task",
+        image="localhost:32000/horseless-repotracker@sha256:3e7706e7709beb835664e613a72d3215c529013c16ab2b2f3c2dbefa4eef2bb0",        name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
         image_pull_policy="IfNotPresent", 
         get_logs=True,

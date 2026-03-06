@@ -73,7 +73,7 @@ def repotracker_schema_reset():
 
     @task.kubernetes(
         task_id="publish_schema_reset_message",
-        image="localhost:32000/horseless-repotracker:sha256:3e7706e7709beb835664e613a72d3215c529013c16ab2b2f3c2dbefa4eef2bb0",        name="k8s-env-task",
+        image="localhost:32000/horseless-repotracker@sha256:3e7706e7709beb835664e613a72d3215c529013c16ab2b2f3c2dbefa4eef2bb0",        name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
         image_pull_policy="IfNotPresent", 
         get_logs=True,
