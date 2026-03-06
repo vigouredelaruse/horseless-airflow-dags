@@ -130,7 +130,7 @@ def github_ingester():
 
     @task.kubernetes(
         task_id="persist_model_run",
-        image="docker-registry.dubridge.ataxlab.com/horseless-repotracker:latest",
+        image="localhost:32000/horseless-repotracker:latest",
         name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
         image_pull_policy="IfNotPresent", 
@@ -273,7 +273,7 @@ def github_ingester():
 
     @task.kubernetes(
         task_id="ingest_repositories",
-        image="docker-registry.dubridge.ataxlab.com/horseless-repotracker:latest",
+        image="localhost:32000/horseless-repotracker:latest",
         name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
         image_pull_policy="IfNotPresent", 
@@ -410,7 +410,7 @@ def github_ingester():
 
     @task.kubernetes(
         task_id="ingest_issues",
-        image="docker-registry.dubridge.ataxlab.com/horseless-repotracker:latest",
+        image="localhost:32000/horseless-repotracker:latest",
         name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
         image_pull_policy="IfNotPresent",
@@ -542,7 +542,7 @@ def github_ingester():
     
     @task.kubernetes(
         task_id="refresh_materialized_views",
-        image="docker-registry.dubridge.ataxlab.com/horseless-repotracker:latest",
+        image="localhost:32000/horseless-repotracker:latest",
         name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
         image_pull_policy="IfNotPresent",
@@ -611,7 +611,7 @@ def github_ingester():
 
     @task.kubernetes(
         task_id="publish_enrichment_trigger",
-        image="docker-registry.dubridge.ataxlab.com/horseless-repotracker:latest",
+        image="localhost:32000/horseless-repotracker:latest",
         name="k8s-env-task",
         env_vars=build_venv_env_vars(include_redis=True),
         image_pull_policy="IfNotPresent",
