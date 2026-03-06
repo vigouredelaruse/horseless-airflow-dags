@@ -447,13 +447,10 @@ def github_ingester():
 
         from horseless_repotracker.repotracker.dto import ModelRunDTO
         from horseless_repotracker.repotracker.ingestion import IssueIngestor
-        from horseless_repotracker.repotracker.orm import (
-            IssueORM,
-            LabelORM,
-            ModelRunORM,
-            RepositoryORM,
-            UserORM,
-        )
+        from horseless_repotracker.repotracker.orm.sqlalchemy_issue import IssueORM
+        from horseless_repotracker.repotracker.orm.sqlalchemy_label import LabelORM
+        from horseless_repotracker.repotracker.orm.sqlalchemy_model_run import ModelRunORM
+        from horseless_repotracker.repotracker.orm.sqlalchemy_repository import RepositoryORM
         from horseless_repotracker.repotracker.persistence_sqlalchemy import PersistenceSQLAlchemy
         from horseless_repotracker.repotracker.sqlalchemy_model import Issue, Label, ModelRun, Repository, User
 
@@ -490,7 +487,6 @@ def github_ingester():
                 # Set up ORM helpers
                 repo_orm = RepositoryORM(sf)
                 issue_orm = IssueORM(sf)
-                user_orm = UserORM(sf)
                 label_orm = LabelORM(sf)
 
                 # Create IssueIngestor
@@ -521,7 +517,14 @@ def github_ingester():
                     ):
                         # Persist users first (foreign key dependency)
                         for user in issue_result.users:
-                            await user_orm.upsert(user)
+                            table = User.__table__
+                            values = {col.name: getattr(user, col.name, None) for col in table.columns}
+                            stmt = pg_insert(table).values(**values)
+                            update_cols = {c.name: stmt.excluded[c.name] for c in table.columns if c.name not in ("github_id", "model_run_id")}
+                            stmt = stmt.on_conflict_do_update(index_elements=["github_id", "model_run_id"], set_=update_cols)
+                            async with sf() as session:
+                                async with session.begin():
+                                    await session.execute(stmt)
 
                         # Persist labels
                         for label in issue_result.labels:
