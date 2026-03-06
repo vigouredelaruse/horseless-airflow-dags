@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from airflow.providers.common.messaging.triggers.msg_queue import MessageQueueTrigger
 from airflow.sdk import Asset, AssetWatcher, Variable, dag, task
+import os
+
 from horseless_dag_env import DEFAULT_ARGS, VENV_REQUIREMENTS, VENV_PIP_OPTIONS, build_venv_env_vars
 
 # ---------------------------------------------------------------------------
@@ -34,6 +36,12 @@ default_args       = DEFAULT_ARGS
 _VENV_REQUIREMENTS = VENV_REQUIREMENTS
 _VENV_PIP_OPTIONS  = VENV_PIP_OPTIONS
 _VENV_ENV_VARS     = build_venv_env_vars()
+
+# Image configuration: allow overriding registry (e.g. microk8s private registry)
+REPO_IMAGE_NAME = "horseless-repotracker"
+REPO_IMAGE_SHA = "sha256:3e7706e7709beb835664e613a72d3215c529013c16ab2b2f3c2dbefa4eef2bb0"
+MICROK8S_REGISTRY = os.getenv("MICROK8S_REGISTRY", "docker-registry.dubridge.ataxlab.com")
+REPO_IMAGE = f"{MICROK8S_REGISTRY}/{REPO_IMAGE_NAME}@{REPO_IMAGE_SHA}"
 
 
 # ---------------------------------------------------------------------------
@@ -130,7 +138,7 @@ def github_ingester():
 
     @task.kubernetes(
         task_id="persist_model_run",
-        image="docker-registry.dubridge.ataxlab.com/horseless-repotracker@sha256:3e7706e7709beb835664e613a72d3215c529013c16ab2b2f3c2dbefa4eef2bb0",
+        image="localhost:32000/horseless-repotracker:sha256:3e7706e7709beb835664e613a72d3215c529013c16ab2b2f3c2dbefa4eef2bb0",
         name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
         image_pull_policy="IfNotPresent", 
@@ -273,7 +281,7 @@ def github_ingester():
 
     @task.kubernetes(
         task_id="ingest_repositories",
-        image="docker-registry.dubridge.ataxlab.com/horseless-repotracker@sha256:3e7706e7709beb835664e613a72d3215c529013c16ab2b2f3c2dbefa4eef2bb0",
+        image="localhost:32000/horseless-repotracker:sha256:3e7706e7709beb835664e613a72d3215c529013c16ab2b2f3c2dbefa4eef2bb0",
         name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
         image_pull_policy="IfNotPresent", 
@@ -410,7 +418,7 @@ def github_ingester():
 
     @task.kubernetes(
         task_id="ingest_issues",
-        image="docker-registry.dubridge.ataxlab.com/horseless-repotracker@sha256:3e7706e7709beb835664e613a72d3215c529013c16ab2b2f3c2dbefa4eef2bb0",
+        image="localhost:32000/horseless-repotracker:sha256:3e7706e7709beb835664e613a72d3215c529013c16ab2b2f3c2dbefa4eef2bb0",
         name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
         image_pull_policy="IfNotPresent",
@@ -542,7 +550,7 @@ def github_ingester():
     
     @task.kubernetes(
         task_id="refresh_materialized_views",
-        image="docker-registry.dubridge.ataxlab.com/horseless-repotracker@sha256:3e7706e7709beb835664e613a72d3215c529013c16ab2b2f3c2dbefa4eef2bb0",
+        image="localhost:32000/horseless-repotracker:sha256:3e7706e7709beb835664e613a72d3215c529013c16ab2b2f3c2dbefa4eef2bb0",
         name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
         image_pull_policy="IfNotPresent",
@@ -611,7 +619,7 @@ def github_ingester():
 
     @task.kubernetes(
         task_id="publish_enrichment_trigger",
-        image="docker-registry.dubridge.ataxlab.com/horseless-repotracker@sha256:3e7706e7709beb835664e613a72d3215c529013c16ab2b2f3c2dbefa4eef2bb0",
+        image="localhost:32000/horseless-repotracker:sha256:3e7706e7709beb835664e613a72d3215c529013c16ab2b2f3c2dbefa4eef2bb0",
         name="k8s-env-task",
         env_vars=build_venv_env_vars(include_redis=True),
         image_pull_policy="IfNotPresent",
