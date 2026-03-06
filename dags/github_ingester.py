@@ -447,10 +447,59 @@ def github_ingester():
 
         from horseless_repotracker.repotracker.dto import ModelRunDTO
         from horseless_repotracker.repotracker.ingestion import IssueIngestor
-        from horseless_repotracker.repotracker.orm.sqlalchemy_issue import IssueORM
-        from horseless_repotracker.repotracker.orm.sqlalchemy_label import LabelORM
-        from horseless_repotracker.repotracker.orm.sqlalchemy_model_run import ModelRunORM
-        from horseless_repotracker.repotracker.orm.sqlalchemy_repository import RepositoryORM
+        import importlib
+        import importlib.util
+
+        def _resolve_orm_class(attr_name: str, candidates: list) -> type:
+            """Resolve and return an ORM class object from a list of candidate module paths.
+
+            This checks each candidate with importlib.util.find_spec() and imports
+            the first module that exposes the requested attribute. Raises
+            ImportError if none of the candidates contain the attribute.
+            """
+            for mod_path in candidates:
+                if importlib.util.find_spec(mod_path) is None:
+                    continue
+                mod = importlib.import_module(mod_path)
+                if hasattr(mod, attr_name):
+                    return getattr(mod, attr_name)
+            raise ImportError(f"Could not resolve ORM class {attr_name} from candidates: {candidates}")
+
+        # Candidate module paths tried in order for each ORM class. These
+        # correspond to the packaging variants observed in different installs.
+        IssueORM = _resolve_orm_class(
+            "IssueORM",
+            [
+                "horseless_repotracker.repotracker.orm",
+                "horseless_repotracker.repotracker.sqlalchemy_issue",
+                "horseless_repotracker.repotracker.orm.sqlalchemy_issue",
+            ],
+        )
+        LabelORM = _resolve_orm_class(
+            "LabelORM",
+            [
+                "horseless_repotracker.repotracker.orm",
+                "horseless_repotracker.repotracker.sqlalchemy_label",
+                "horseless_repotracker.repotracker.orm.sqlalchemy_label",
+            ],
+        )
+        ModelRunORM = _resolve_orm_class(
+            "ModelRunORM",
+            [
+                "horseless_repotracker.repotracker.orm",
+                "horseless_repotracker.repotracker.sqlalchemy_model_run",
+                "horseless_repotracker.repotracker.orm.sqlalchemy_model_run",
+            ],
+        )
+        RepositoryORM = _resolve_orm_class(
+            "RepositoryORM",
+            [
+                "horseless_repotracker.repotracker.orm",
+                "horseless_repotracker.repotracker.sqlalchemy_repository",
+                "horseless_repotracker.repotracker.orm.sqlalchemy_repository",
+            ],
+        )
+
         from horseless_repotracker.repotracker.persistence_sqlalchemy import PersistenceSQLAlchemy
         from horseless_repotracker.repotracker.sqlalchemy_model import Issue, Label, ModelRun, Repository, User
 
