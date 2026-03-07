@@ -289,7 +289,7 @@ def github_ingester():
         get_logs=True,
         is_delete_operator_pod=False,
     )
-    def ingest_repositories(dto_json: str) -> list:
+    def ingest_repositories(dto_json: str) -> None:
         """Stream repositories from the ModelRunParameter and ingest issues.
 
         For each ``owner/repo`` string in :attr:`ModelRunParameter.repos`:
@@ -407,14 +407,11 @@ def github_ingester():
 
         repositories = asyncio.run(_ingest())
         print(f"[ingest_repositories] ingested {len(repositories)} repositories")
-        
-        # Write to XCom for Kubernetes pod-to-pod communication
-        repo_list = [repo.full_name for repo in repositories]
-        os.makedirs('/airflow/xcom', exist_ok=True)
-        with open('/airflow/xcom/return.json', 'w') as f:
-            json.dump(repo_list, f)
-        
-        return repo_list
+        # Repositories are persisted to the DB by the upsert logic above.
+        # Do not rely on fragile K8s-to-K8s XCom propagation — downstream
+        # tasks should read the repository list from the DB via the
+        # repotracker.messaging helper.
+        return None
 
     @task.kubernetes(
         task_id="ingest_issues",
@@ -426,7 +423,7 @@ def github_ingester():
         get_logs=True,
         is_delete_operator_pod=False,
     )
-    def ingest_issues(dto_json: str, repositories: list) -> None:
+    def ingest_issues(dto_json: str) -> None:
         """Ingest issues for the repositories ingested by the previous task.
 
         For each repository ingested by ``ingest_repositories``, streams issues
@@ -455,6 +452,9 @@ def github_ingester():
             LabelORM,
             ModelRunORM,
             RepositoryORM,
+        )
+        from horseless_repotracker.repotracker.messaging import (
+            get_repositories_for_model_run,
         )
 
         from horseless_repotracker.repotracker.persistence_sqlalchemy import PersistenceSQLAlchemy
@@ -498,15 +498,13 @@ def github_ingester():
                 # Create IssueIngestor
                 ingestor = IssueIngestor(github_token=token)
 
-                    # If upstream Kubernetes task did not return a repository list
-                    # (K8s-to-K8s XComs can be unreliable), fall back to reading
-                    # the repository list from the database for this model run.
-                    if not repositories:
-                        persisted_repos = await repo_orm.list_by_run(model_run_id)
-                        repositories = [r.full_name for r in persisted_repos]
+                # Read the authoritative repository list from the DB.  This
+                # avoids relying on K8s-to-K8s XCom propagation and centralises
+                # the source of truth in the persistence layer.
+                repositories = get_repositories_for_model_run(model_run_id)
 
                 # Process each repository
-                for repo_full_name in repositories:  # repositories is a list of strings
+                for repo_full_name in repositories:
                     logger.info("Starting issue ingestion for repository: %s", repo_full_name)
 
                     # Look up the Repository object from the database
@@ -732,7 +730,7 @@ def github_ingester():
     # do not rely on K8s-to-K8s XCom return values — they are discarded.
     model_run_id = persist_model_run(dto_json)
     repositories = ingest_repositories(dto_json)
-    issues = ingest_issues(dto_json, repositories)
+    issues = ingest_issues(dto_json)
     refreshed = refresh_materialized_views(dto_json)
     published = publish_enrichment_trigger(dto_json)
 
