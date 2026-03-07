@@ -498,6 +498,13 @@ def github_ingester():
                 # Create IssueIngestor
                 ingestor = IssueIngestor(github_token=token)
 
+                    # If upstream Kubernetes task did not return a repository list
+                    # (K8s-to-K8s XComs can be unreliable), fall back to reading
+                    # the repository list from the database for this model run.
+                    if not repositories:
+                        persisted_repos = await repo_orm.list_by_run(model_run_id)
+                        repositories = [r.full_name for r in persisted_repos]
+
                 # Process each repository
                 for repo_full_name in repositories:  # repositories is a list of strings
                     logger.info("Starting issue ingestion for repository: %s", repo_full_name)
