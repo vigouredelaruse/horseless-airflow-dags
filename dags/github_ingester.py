@@ -141,7 +141,7 @@ def github_ingester():
         image="localhost:32000/horseless-repotracker:latest",
         name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
-        image_pull_policy="IfNotPresent", 
+        image_pull_policy="Always", 
         startup_timeout_seconds=600,
         get_logs=True,
         is_delete_operator_pod=False,

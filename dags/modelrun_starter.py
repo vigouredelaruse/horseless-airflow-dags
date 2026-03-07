@@ -72,7 +72,7 @@ def modelrun_starter():
         get_logs=True,
         startup_timeout_seconds=600,
         is_delete_operator_pod=False,        
-        image_pull_policy="IfNotPresent",
+        image_pull_policy="Always",
         env_vars=build_venv_env_vars(include_redis=True),
     )
     def publish_modelrun(model_run_json: str) -> int:

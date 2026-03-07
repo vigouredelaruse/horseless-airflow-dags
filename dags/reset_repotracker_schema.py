@@ -73,9 +73,10 @@ def repotracker_schema_reset():
 
     @task.kubernetes(
         task_id="publish_schema_reset_message",
-        image="localhost:32000/horseless-repotracker:latest",        name="k8s-env-task",
+        image="localhost:32000/horseless-repotracker:latest",        
+        name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
-        image_pull_policy="IfNotPresent", 
+        image_pull_policy="Always", 
         get_logs=True,
         is_delete_operator_pod=False
     )
