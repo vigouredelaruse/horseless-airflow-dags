@@ -67,7 +67,7 @@ def modelrun_starter():
 
     @task.kubernetes(
         task_id="publish_modelrun",
-        image="localhost:32000/horseless-repotracker@sha256:bb90d28f943d91256b87c353d3bc5d94ab080e4719851ff02d1cc8e28072bf45",
+        image="localhost:32000/horseless-repotracker:latest",
         name="modelrun_starter",   
         get_logs=True,
         startup_timeout_seconds=600,
