@@ -414,6 +414,79 @@ def github_ingester():
         return None
 
     @task.kubernetes(
+        task_id="ingest_repository_owners",
+        image="localhost:32000/horseless-repotracker:latest",
+        name="k8s-env-task",
+        env_vars=_VENV_ENV_VARS,
+        image_pull_policy="IfNotPresent",
+        startup_timeout_seconds=600,
+        get_logs=True,
+        is_delete_operator_pod=False,
+    )
+    def ingest_repository_owners(dto_json: str) -> None:
+        """Fetch and persist repository owner profiles (User or Organization).
+
+        Runs after `ingest_repositories`. Reads the authoritative repository
+        list from the DB via `repotracker.messaging.get_repositories_for_model_run`
+        and for each repository calls the RepositoryOwnerIngestor to fetch and
+        persist the owner row.
+        """
+        import asyncio
+        import logging
+        import os
+
+        import aiohttp
+        from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+        from horseless_repotracker.repotracker.dto import ModelRunDTO
+        from horseless_repotracker.repotracker.orm import (
+            UserORM,
+            OrganizationORM,
+        )
+        from horseless_repotracker.repotracker.ingestion import RepositoryOwnerIngestor
+        from horseless_repotracker.repotracker.messaging import get_repositories_for_model_run
+        from horseless_repotracker.repotracker.persistence_sqlalchemy import PersistenceSQLAlchemy
+        from horseless_repotracker.repotracker.sqlalchemy_model import Repository
+
+        logger = logging.getLogger(__name__)
+
+        async def _ingest_owners():
+            dto = ModelRunDTO.from_json(dto_json)
+            model_run_id = dto.model_run_id
+            if not model_run_id:
+                # nothing to do
+                return
+
+            # DB async engine for ORM upserts
+            url = PersistenceSQLAlchemy.get_async_postgres_db_url()
+            engine = create_async_engine(url, echo=False)
+            sf = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+
+            user_orm = UserORM(sf)
+            org_orm = OrganizationORM(sf)
+            ingestor = RepositoryOwnerIngestor(token=dto.token or os.environ.get("GITHUB_TOKEN", ""))
+
+            repos = get_repositories_for_model_run(model_run_id)
+            if not repos:
+                logger.info("No repositories found for model_run_id=%s; skipping owner ingestion", model_run_id)
+                return
+
+            async with aiohttp.ClientSession() as session:
+                for repo_full in repos:
+                    # Try to look up repository row to ensure we have coordinates
+                    # We rely on Repository.full_name (owner/repo) to derive owner login
+                    try:
+                        await ingestor.ingest(session, Repository(full_name=repo_full), model_run_id, user_orm, org_orm)
+                    except Exception:
+                        logger.exception("Failed to ingest owner for repository %s", repo_full)
+
+            await engine.dispose()
+
+        asyncio.run(_ingest_owners())
+        print("[ingest_repository_owners] completed owner ingestion")
+        return None
+
+    @task.kubernetes(
         task_id="ingest_issues",
         image="localhost:32000/horseless-repotracker:latest",
         name="k8s-env-task",
@@ -734,12 +807,14 @@ def github_ingester():
     # do not rely on K8s-to-K8s XCom return values — they are discarded.
     model_run_id = persist_model_run(dto_json)
     repositories = ingest_repositories(dto_json)
+    repository_owners = ingest_repository_owners(dto_json)
     issues = ingest_issues(dto_json)
     refreshed = refresh_materialized_views(dto_json)
     published = publish_enrichment_trigger(dto_json)
 
     # Enforce ordering explicitly via task edges
-    model_run_id >> repositories >> issues >> refreshed >> published
+    # Ensure repository owners are ingested after repositories and before issues
+    model_run_id >> repositories >> repository_owners >> issues >> refreshed >> published
 
 
 github_ingester()
