@@ -677,27 +677,31 @@ def github_ingester():
         model_run_id = dto.model_run_id
         # If DTO has no explicit model_run_id, attempt to upsert/read it.
         if not model_run_id:
-            # Minimal upsert to obtain id
-            url = PersistenceSQLAlchemy.get_async_postgres_db_url()
-            engine = create_async_engine(url, echo=False)
-            sf = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+            # Minimal upsert to obtain id. Create the async engine inside
+            # the coroutine so creation and disposal happen on the same
+            # event loop. This avoids attaching Futures to a different loop
+            # when disposing the engine from a separate ``asyncio.run`` call.
             async def _get_id():
-                mr_table = ModelRun.__table__
-                model_run_kwargs = {}
-                for col in mr_table.columns:
-                    if col.name == "xmin":
-                        continue
-                    if col.name == "started_at":
-                        model_run_kwargs["started_at"] = datetime.utcnow()
-                        continue
-                    if hasattr(dto, col.name):
-                        model_run_kwargs[col.name] = getattr(dto, col.name)
-                model_run = ModelRun(**model_run_kwargs)
-                return await ModelRunORM(sf).upsert(model_run)
-            try:
-                model_run_id = asyncio.run(_get_id())
-            finally:
-                asyncio.run(engine.dispose())
+                url = PersistenceSQLAlchemy.get_async_postgres_db_url()
+                engine = create_async_engine(url, echo=False)
+                sf = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+                try:
+                    mr_table = ModelRun.__table__
+                    model_run_kwargs = {}
+                    for col in mr_table.columns:
+                        if col.name == "xmin":
+                            continue
+                        if col.name == "started_at":
+                            model_run_kwargs["started_at"] = datetime.utcnow()
+                            continue
+                        if hasattr(dto, col.name):
+                            model_run_kwargs[col.name] = getattr(dto, col.name)
+                    model_run = ModelRun(**model_run_kwargs)
+                    return await ModelRunORM(sf).upsert(model_run)
+                finally:
+                    await engine.dispose()
+
+            model_run_id = asyncio.run(_get_id())
 
         import os
         
