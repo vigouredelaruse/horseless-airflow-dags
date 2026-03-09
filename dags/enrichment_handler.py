@@ -312,9 +312,9 @@ def enrichment_handler():
         )
         df = df.drop(columns=["labels_json"])
 
-        # Add a resample-friendly sample_time (use created_at as seed)
-        if "sample_time" not in df.columns:
-            df["sample_time"] = df["created_at"]
+        # NOTE: schema drift: use `created_at` as the canonical sample time
+        # Historically code used `sample_time`; treat `created_at` as the
+        # blanket replacement wherever `sample_time` was expected.
 
         logger.info("Loaded %d issue rows for enrichment.", len(df))
 
@@ -396,7 +396,7 @@ def enrichment_handler():
 
         def make_stage1_records(row):
             return {
-                "sample_time":              row.get("sample_time") or row.get("created_at"),
+                "created_at":              row.get("sample_time") or row.get("created_at"),
                 "issue_id":                 int(row["id"]) if pd.notna(row.get("id")) else None,
                 "model_run_id":             int(model_run_id),
                 "repo":                     row.get("repo"),
@@ -422,7 +422,7 @@ def enrichment_handler():
             except (TypeError, ValueError):
                 return None
 
-        df_s1_tz = df_to_safe(df_s1, ["sample_time", "created_at"])
+        df_s1_tz = df_to_safe(df_s1, ["created_at"])
         records_s1 = [
             make_stage1_records(row)
             for _, row in df_s1_tz.iterrows()
@@ -438,7 +438,7 @@ def enrichment_handler():
 
         def make_stage2_records(row):
             return {
-                "sample_time":               row.get("sample_time") or row.get("created_at"),
+                "created_at":               row.get("sample_time") or row.get("created_at"),
                 "issue_id":                  int(row["id"]) if pd.notna(row.get("id")) else None,
                 "model_run_id":              int(model_run_id),
                 "repo":                      row.get("repo"),
@@ -447,7 +447,7 @@ def enrichment_handler():
                 "cross_mention_target_count": _f(row.get("cross_mention_target_count")),
             }
 
-        df_s2_tz = df_to_safe(df_s2, ["sample_time", "created_at"])
+        df_s2_tz = df_to_safe(df_s2, ["created_at"])
         records_s2 = [
             make_stage2_records(row)
             for _, row in df_s2_tz.iterrows()
@@ -462,7 +462,7 @@ def enrichment_handler():
         # ------------------------------------------------------------------
         logger.info("Stage 3: text embeddings")
         df_s3 = asyncio.run(pipeline._stage_text_embeddings(df_s2))
-        df_s3_tz = df_to_safe(df_s3, ["sample_time", "created_at"])
+        df_s3_tz = df_to_safe(df_s3, ["created_at"])
 
         embed_cols = [
             "issue_body_embedding", "issue_title_embedding",
@@ -478,7 +478,7 @@ def enrichment_handler():
 
         def make_stage3_records(row):
             rec = {
-                "sample_time":  row.get("created_at"),
+                "created_at":  row.get("created_at"),
                 "issue_id":     int(row["id"]) if pd.notna(row.get("id")) else None,
                 "model_run_id": int(model_run_id),
                 "repo":         row.get("repo"),
@@ -520,7 +520,7 @@ def enrichment_handler():
         # ------------------------------------------------------------------
         logger.info("Stage 5: physics features")
         df_s5 = asyncio.run(pipeline._stage_physics_features(df_s3))
-        df_s5_tz = df_to_safe(df_s5, ["sample_time", "created_at"])
+        df_s5_tz = df_to_safe(df_s5, ["created_at"])
 
         physics_cols = [
             "displacement_open", "velocity_open", "acceleration_open", "k_est_open", "force_open",
@@ -535,7 +535,7 @@ def enrichment_handler():
 
         def make_stage5_records(row):
             rec = {
-                "sample_time":  row.get("sample_time") or row.get("created_at"),
+                "created_at":  row.get("sample_time") or row.get("created_at"),
                 "issue_id":     int(row["id"]) if pd.notna(row.get("id")) else None,
                 "model_run_id": int(model_run_id),
                 "repo":         row.get("repo"),
@@ -557,7 +557,7 @@ def enrichment_handler():
         # ------------------------------------------------------------------
         logger.info("Stage 6: vector coordinates")
         df_s6 = asyncio.run(pipeline._stage_vector_coordinates(df_s5))
-        df_s6_tz = df_to_safe(df_s6, ["sample_time", "created_at"])
+        df_s6_tz = df_to_safe(df_s6, ["created_at"])
 
         coord_cols = [
             "vector_x", "vector_y", "vector_magnitude",
@@ -571,7 +571,7 @@ def enrichment_handler():
                 or row.get("orthogonal_repo_coord")
             )
             rec = {
-                "sample_time":           row.get("sample_time") or row.get("created_at"),
+                "created_at":           row.get("sample_time") or row.get("created_at"),
                 "issue_id":              int(row["id"]) if pd.notna(row.get("id")) else None,
                 "model_run_id":          int(model_run_id),
                 "repo":                  row.get("repo"),
@@ -597,7 +597,7 @@ def enrichment_handler():
         df_s8 = asyncio.run(pipeline._stage_spatial_derivatives(df_s7))
         logger.info("Stage 9: partial derivatives (time only)")
         df_s9 = asyncio.run(pipeline._stage_partial_derivatives_time(df_s8))
-        df_s9_tz = df_to_safe(df_s9, ["sample_time", "created_at"])
+        df_s9_tz = df_to_safe(df_s9, ["created_at"])
 
         deriv_cols = [
             "partial_dderivative_open_dt", "partial_dderivative_closed_dt",
@@ -610,7 +610,7 @@ def enrichment_handler():
 
         def make_stage789_records(row):
             rec = {
-                "sample_time":  row.get("sample_time") or row.get("created_at"),
+                "created_at":  row.get("sample_time") or row.get("created_at"),
                 "issue_id":     int(row["id"]) if pd.notna(row.get("id")) else None,
                 "model_run_id": int(model_run_id),
                 "repo":         row.get("repo"),
@@ -645,7 +645,7 @@ def enrichment_handler():
 
         Uses ``REFRESH MATERIALIZED VIEW CONCURRENTLY`` so existing readers
         are not blocked.  The unique index ``uq_mv_analysis_ready`` on
-        ``(issue_id, model_run_id, sample_time)`` must exist (created by the
+        ``(issue_id, model_run_id, created_at)`` must exist (created by the
         schema reset handler) for ``CONCURRENTLY`` to work.
 
         Args:
