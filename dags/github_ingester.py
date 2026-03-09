@@ -522,6 +522,7 @@ def github_ingester():
             LabelORM,
             ModelRunORM,
             RepositoryORM,
+            ModelRunParameterORM,
         )
         from horseless_repotracker.repotracker.messaging import (
             get_repositories_for_model_run,
