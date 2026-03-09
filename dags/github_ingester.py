@@ -368,6 +368,7 @@ def github_ingester():
             try:
                 # Derive model_run_id by upserting/read ModelRun from the DTO.
                 dto = ModelRunDTO.from_json(dto_json)
+                print(f"[ingest_repositories] DTO model_run_id={dto.model_run_id}")
                 # Upsert ModelRun minimally to obtain id (idempotent).
                 mr_table = ModelRun.__table__
                 model_run_kwargs = {}
@@ -382,24 +383,30 @@ def github_ingester():
 
                 model_run = ModelRun(**model_run_kwargs)
                 model_run_id: int = await ModelRunORM(sf).upsert(model_run)
+                print(f"[ingest_repositories] model_run_id={model_run_id}")
 
                 param_orm = ModelRunParameterORM(sf)
                 params = await param_orm.get_by_model_run(model_run_id)
                 # If parameters missing (persist_model_run may not have executed),
                 # fall back to DTO fields.
                 if params is None:
+                    print(f"[ingest_repositories] No params found, using DTO fields")
                     token: str = dto.token or os.environ.get("GITHUB_TOKEN", "")
                     repos: list = dto.repos if isinstance(dto.repos, list) else list(dto.repos)
                 else:
+                    print(f"[ingest_repositories] Using params from DB")
                     token: str = params.token or os.environ.get("GITHUB_TOKEN", "")
                     repos: list = params.repos if isinstance(params.repos, list) else list(params.repos)
 
+                print(f"[ingest_repositories] repos={repos}, token={'<set>' if token else '<empty>'}")
                 ingestor = IssueIngestor(github_token=token)
                 ingested: list = []
 
                 async for repository in _stream_repositories(repos, token, sf, model_run_id):
                     ingested.append(repository)
+                    print(f"[ingest_repositories] streamed repository: {repository.full_name}")
 
+                print(f"[ingest_repositories] total ingested: {len(ingested)} repositories")
                 return ingested
 
             finally:
@@ -449,38 +456,72 @@ def github_ingester():
         from horseless_repotracker.repotracker.sqlalchemy_model import Repository
 
         logger = logging.getLogger(__name__)
+        logger.setLevel(logging.INFO)
 
         async def _ingest_owners():
+            from horseless_repotracker.repotracker.orm import ModelRunORM
+            from horseless_repotracker.repotracker.sqlalchemy_model import ModelRun
+            
             dto = ModelRunDTO.from_json(dto_json)
-            model_run_id = dto.model_run_id
-            if not model_run_id:
-                # nothing to do
-                return
-
+            print(f"[ingest_repository_owners] DTO model_run_id={dto.model_run_id}")
+            
             # DB async engine for ORM upserts
             url = PersistenceSQLAlchemy.get_async_postgres_db_url()
             engine = create_async_engine(url, echo=False)
             sf = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
-            user_orm = UserORM(sf)
-            org_orm = OrganizationORM(sf)
-            ingestor = RepositoryOwnerIngestor(token=dto.token or os.environ.get("GITHUB_TOKEN", ""))
+            try:
+                # Upsert ModelRun to get model_run_id if not in DTO
+                model_run_id = dto.model_run_id
+                if not model_run_id:
+                    print("[ingest_repository_owners] model_run_id not in DTO, upserting ModelRun...")
+                    from horseless_repotracker.repotracker.orm import ModelRunORM
+                    from horseless_repotracker.repotracker.sqlalchemy_model import ModelRun
+                    from datetime import datetime
+                    
+                    mr_table = ModelRun.__table__
+                    model_run_kwargs = {}
+                    for col in mr_table.columns:
+                        if col.name == "xmin":
+                            continue
+                        if col.name == "started_at":
+                            model_run_kwargs["started_at"] = datetime.utcnow()
+                            continue
+                        if hasattr(dto, col.name):
+                            model_run_kwargs[col.name] = getattr(dto, col.name)
+                    model_run = ModelRun(**model_run_kwargs)
+                    model_run_id = await ModelRunORM(sf).upsert(model_run)
+                    print(f"[ingest_repository_owners] upserted model_run_id={model_run_id}")
 
-            repos = get_repositories_for_model_run(model_run_id)
-            if not repos:
-                logger.info("No repositories found for model_run_id=%s; skipping owner ingestion", model_run_id)
-                return
+                user_orm = UserORM(sf)
+                org_orm = OrganizationORM(sf)
+                token = dto.token or os.environ.get("GITHUB_TOKEN", "")
+                print(f"[ingest_repository_owners] token={'<set>' if token else '<empty>'}")
+                ingestor = RepositoryOwnerIngestor(token=token)
 
-            async with aiohttp.ClientSession() as session:
-                for repo_full in repos:
-                    # Try to look up repository row to ensure we have coordinates
-                    # We rely on Repository.full_name (owner/repo) to derive owner login
-                    try:
-                        await ingestor.ingest(session, Repository(full_name=repo_full), model_run_id, user_orm, org_orm)
-                    except Exception:
-                        logger.exception("Failed to ingest owner for repository %s", repo_full)
+                repos = get_repositories_for_model_run(model_run_id)
+                print(f"[ingest_repository_owners] found {len(repos) if repos else 0} repositories for model_run_id={model_run_id}")
+                if not repos:
+                    logger.info("No repositories found for model_run_id=%s; skipping owner ingestion", model_run_id)
+                    return
 
-            await engine.dispose()
+                owner_count = 0
+                async with aiohttp.ClientSession() as session:
+                    for repo_full in repos:
+                        # Try to look up repository row to ensure we have coordinates
+                        # We rely on Repository.full_name (owner/repo) to derive owner login
+                        try:
+                            result = await ingestor.ingest(session, Repository(full_name=repo_full), model_run_id, user_orm, org_orm)
+                            if result:
+                                owner_count += 1
+                                print(f"[ingest_repository_owners] ingested owner for {repo_full}: {result.login if hasattr(result, 'login') else result}")
+                        except Exception as e:
+                            logger.exception("Failed to ingest owner for repository %s", repo_full)
+                            print(f"[ingest_repository_owners] ERROR ingesting owner for {repo_full}: {e}")
+
+                print(f"[ingest_repository_owners] ingested {owner_count} owners")
+            finally:
+                await engine.dispose()
 
         asyncio.run(_ingest_owners())
         print("[ingest_repository_owners] completed owner ingestion")
