@@ -356,13 +356,32 @@ def enrichment_handler():
                 return
             cols = list(records[0].keys())
             col_str = ", ".join(f'"{c}"' for c in cols)
-            values = [
-                tuple(
-                    (v.tolist() if isinstance(v, np.ndarray) else v)
-                    for v in row.values()
-                )
-                for row in records
-            ]
+            def _normalize_value(v):
+                if v is None:
+                    return None
+                # numpy array -> native python list of floats
+                if isinstance(v, np.ndarray):
+                    try:
+                        return v.astype(float).tolist()
+                    except Exception:
+                        return [float(x) for x in v.tolist()]
+                # numpy scalar types -> native float/int
+                if isinstance(v, (np.floating, np.integer)):
+                    return float(v)
+                # lists/tuples may contain numpy scalars or arrays
+                if isinstance(v, (list, tuple)):
+                    out = []
+                    for x in v:
+                        if isinstance(x, (np.floating, np.integer)):
+                            out.append(float(x))
+                        elif isinstance(x, np.ndarray):
+                            out.append(_normalize_value(x))
+                        else:
+                            out.append(x)
+                    return out
+                return v
+
+            values = [tuple(_normalize_value(v) for v in row.values()) for row in records]
             sql = (
                 f"INSERT INTO {table} ({col_str}) VALUES %s "
                 "ON CONFLICT DO NOTHING"
