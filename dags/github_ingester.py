@@ -271,12 +271,8 @@ def github_ingester():
 
         model_run_id = asyncio.run(_persist())
         print(f"[persist_model_run] upserted model_run_id={model_run_id}")
-        
-        # Write to XCom for Kubernetes pod-to-pod communication
-        os.makedirs('/airflow/xcom', exist_ok=True)
-        with open('/airflow/xcom/return.json', 'w') as f:
-            json.dump(model_run_id, f)
-        
+        # Airflow 3.x handles TaskFlow XCom return files for Kubernetes tasks
+        # automatically; do not manually create or fsync `/airflow/xcom/return.json`.
         return model_run_id
 
     @task.kubernetes(
