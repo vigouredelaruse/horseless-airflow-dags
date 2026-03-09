@@ -595,27 +595,45 @@ def github_ingester():
                         end_date=end_date,
                         keyword=keyword,
                     ):
-                        # Persist users first (foreign key dependency)
-                        for user in issue_result.users:
-                            table = User.__table__
-                            # Only include non-None values to avoid constraint violations
-                            values = {col.name: val for col in table.columns if (val := getattr(user, col.name, None)) is not None}
-                            stmt = pg_insert(table).values(**values)
-                            # Only update columns that have non-None values in the new data
-                            update_cols = {c.name: stmt.excluded[c.name] for c in table.columns 
-                                           if c.name not in ("github_id", "model_run_id") 
-                                           and getattr(user, c.name, None) is not None}
-                            stmt = stmt.on_conflict_do_update(index_elements=["github_id", "model_run_id"], set_=update_cols)
-                            async with sf() as session:
-                                async with session.begin():
+                        # Persist all entities for this issue in a SINGLE transaction
+                        # to ensure atomicity and proper FK constraint ordering
+                        async with sf() as session:
+                            async with session.begin():
+                                # 1. Persist users first (foreign key dependency)
+                                for user in issue_result.users:
+                                    table = User.__table__
+                                    # Only include non-None values to avoid constraint violations
+                                    values = {col.name: val for col in table.columns if (val := getattr(user, col.name, None)) is not None}
+                                    stmt = pg_insert(table).values(**values)
+                                    # Only update columns that have non-None values in the new data
+                                    update_cols = {c.name: stmt.excluded[c.name] for c in table.columns 
+                                                   if c.name not in ("github_id", "model_run_id") 
+                                                   and getattr(user, c.name, None) is not None}
+                                    stmt = stmt.on_conflict_do_update(index_elements=["github_id", "model_run_id"], set_=update_cols)
                                     await session.execute(stmt)
 
-                        # Persist labels
-                        for label in issue_result.labels:
-                            await label_orm.upsert(label)
+                                # 2. Persist labels (using ORM with existing session)
+                                for label in issue_result.labels:
+                                    table = Label.__table__
+                                    values = {col.name: getattr(label, col.name) for col in table.columns}
+                                    stmt = pg_insert(table).values(**values)
+                                    update_cols = {c.name: stmt.excluded[c.name] for c in table.columns 
+                                                   if c.name not in ("github_id", "model_run_id")}
+                                    stmt = stmt.on_conflict_do_update(index_elements=["github_id", "model_run_id"], set_=update_cols)
+                                    await session.execute(stmt)
 
-                        # Persist the issue
-                        await issue_orm.upsert(issue_result.issue)
+                                # 3. Persist the issue (using ORM with existing session)
+                                issue_table = Issue.__table__
+                                issue_values = {col.name: getattr(issue_result.issue, col.name) for col in issue_table.columns}
+                                issue_stmt = pg_insert(issue_table).values(**issue_values)
+                                issue_update_cols = {c.name: issue_stmt.excluded[c.name] for c in issue_table.columns 
+                                                     if c.name not in ("github_id", "model_run_id")}
+                                issue_stmt = issue_stmt.on_conflict_do_update(
+                                    index_elements=["github_id", "model_run_id"], 
+                                    set_=issue_update_cols
+                                )
+                                await session.execute(issue_stmt)
+                                # Transaction commits when context exits
 
                         issue_count += 1
                         if issue_count % 100 == 0:
