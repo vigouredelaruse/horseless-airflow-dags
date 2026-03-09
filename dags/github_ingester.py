@@ -289,7 +289,7 @@ def github_ingester():
         get_logs=True,
         is_delete_operator_pod=False,
     )
-    def ingest_repositories(dto_json: str) -> None:
+    def ingest_repositories(model_run_id: int) -> None:
         """Stream repositories from the ModelRunParameter and ingest issues.
 
         For each ``owner/repo`` string in :attr:`ModelRunParameter.repos`:
@@ -366,37 +366,15 @@ def github_ingester():
             sf = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
             try:
-                # Derive model_run_id by upserting/read ModelRun from the DTO.
-                dto = ModelRunDTO.from_json(dto_json)
-                print(f"[ingest_repositories] DTO model_run_id={dto.model_run_id}")
-                # Upsert ModelRun minimally to obtain id (idempotent).
-                mr_table = ModelRun.__table__
-                model_run_kwargs = {}
-                for col in mr_table.columns:
-                    if col.name == "xmin":
-                        continue
-                    if col.name == "started_at":
-                        model_run_kwargs["started_at"] = datetime.utcnow()
-                        continue
-                    if hasattr(dto, col.name):
-                        model_run_kwargs[col.name] = getattr(dto, col.name)
-
-                model_run = ModelRun(**model_run_kwargs)
-                model_run_id: int = await ModelRunORM(sf).upsert(model_run)
-                print(f"[ingest_repositories] model_run_id={model_run_id}")
-
+                # Read the persisted ModelRunParameter to obtain token/repos.
                 param_orm = ModelRunParameterORM(sf)
                 params = await param_orm.get_by_model_run(model_run_id)
-                # If parameters missing (persist_model_run may not have executed),
-                # fall back to DTO fields.
                 if params is None:
-                    print(f"[ingest_repositories] No params found, using DTO fields")
-                    token: str = dto.token or os.environ.get("GITHUB_TOKEN", "")
-                    repos: list = dto.repos if isinstance(dto.repos, list) else list(dto.repos)
-                else:
-                    print(f"[ingest_repositories] Using params from DB")
-                    token: str = params.token or os.environ.get("GITHUB_TOKEN", "")
-                    repos: list = params.repos if isinstance(params.repos, list) else list(params.repos)
+                    # If parameters missing, log and skip ingestion
+                    print(f"[ingest_repositories] No ModelRunParameter found for model_run_id={model_run_id}; skipping")
+                    return []
+                token: str = params.token or os.environ.get("GITHUB_TOKEN", "")
+                repos: list = params.repos if isinstance(params.repos, list) else list(params.repos)
 
                 print(f"[ingest_repositories] repos={repos}, token={'<set>' if token else '<empty>'}")
                 ingestor = IssueIngestor(github_token=token)
@@ -430,7 +408,7 @@ def github_ingester():
         get_logs=True,
         is_delete_operator_pod=False,
     )
-    def ingest_repository_owners(dto_json: str) -> None:
+    def ingest_repository_owners(model_run_id: int) -> None:
         """Fetch and persist repository owner profiles (User or Organization).
 
         Runs after `ingest_repositories`. Reads the authoritative repository
@@ -459,43 +437,25 @@ def github_ingester():
         logger.setLevel(logging.INFO)
 
         async def _ingest_owners():
-            from horseless_repotracker.repotracker.orm import ModelRunORM
+            from horseless_repotracker.repotracker.orm import ModelRunORM, ModelRunParameterORM
             from horseless_repotracker.repotracker.sqlalchemy_model import ModelRun
-            
-            dto = ModelRunDTO.from_json(dto_json)
-            print(f"[ingest_repository_owners] DTO model_run_id={dto.model_run_id}")
-            
+
             # DB async engine for ORM upserts
             url = PersistenceSQLAlchemy.get_async_postgres_db_url()
             engine = create_async_engine(url, echo=False)
             sf = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
             try:
-                # Upsert ModelRun to get model_run_id if not in DTO
-                model_run_id = dto.model_run_id
-                if not model_run_id:
-                    print("[ingest_repository_owners] model_run_id not in DTO, upserting ModelRun...")
-                    from horseless_repotracker.repotracker.orm import ModelRunORM
-                    from horseless_repotracker.repotracker.sqlalchemy_model import ModelRun
-                    from datetime import datetime
-                    
-                    mr_table = ModelRun.__table__
-                    model_run_kwargs = {}
-                    for col in mr_table.columns:
-                        if col.name == "xmin":
-                            continue
-                        if col.name == "started_at":
-                            model_run_kwargs["started_at"] = datetime.utcnow()
-                            continue
-                        if hasattr(dto, col.name):
-                            model_run_kwargs[col.name] = getattr(dto, col.name)
-                    model_run = ModelRun(**model_run_kwargs)
-                    model_run_id = await ModelRunORM(sf).upsert(model_run)
-                    print(f"[ingest_repository_owners] upserted model_run_id={model_run_id}")
-
                 user_orm = UserORM(sf)
                 org_orm = OrganizationORM(sf)
-                token = dto.token or os.environ.get("GITHUB_TOKEN", "")
+
+                # Read token from persisted parameters
+                param_orm = ModelRunParameterORM(sf)
+                params = await param_orm.get_by_model_run(model_run_id)
+                if params is None:
+                    print(f"[ingest_repository_owners] No ModelRunParameter for model_run_id={model_run_id}; skipping")
+                    return
+                token = params.token or os.environ.get("GITHUB_TOKEN", "")
                 print(f"[ingest_repository_owners] token={'<set>' if token else '<empty>'}")
                 ingestor = RepositoryOwnerIngestor(token=token)
 
@@ -537,7 +497,7 @@ def github_ingester():
         get_logs=True,
         is_delete_operator_pod=False,
     )
-    def ingest_issues(dto_json: str) -> None:
+    def ingest_issues(model_run_id: int) -> None:
         """Ingest issues for the repositories ingested by the previous task.
 
         For each repository ingested by ``ingest_repositories``, streams issues
@@ -577,33 +537,24 @@ def github_ingester():
         logger = logging.getLogger(__name__)
 
         async def _ingest_issues():
-            # Deserialize DTO to get token, model_run_id, and date range
-            dto = ModelRunDTO.from_json(dto_json)
-            token = dto.token or os.environ.get("GITHUB_TOKEN", "")
-            start_date = dto.start_date
-            end_date = dto.end_date
-            keyword = dto.keyword
-
-            # Set up database connection
+            # Read token and date range from persisted parameters
             url = PersistenceSQLAlchemy.get_async_postgres_db_url()
             engine = create_async_engine(url, echo=False)
             sf = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
-            try:
-                # Derive model_run_id from DTO (may need to upsert ModelRun)
-                mr_table = ModelRun.__table__
-                model_run_kwargs = {}
-                for col in mr_table.columns:
-                    if col.name == "xmin":
-                        continue
-                    if col.name == "started_at":
-                        model_run_kwargs["started_at"] = datetime.utcnow()
-                        continue
-                    if hasattr(dto, col.name):
-                        model_run_kwargs[col.name] = getattr(dto, col.name)
-                model_run = ModelRun(**model_run_kwargs)
-                model_run_id = await ModelRunORM(sf).upsert(model_run)
+            # Load params
+            param_orm = ModelRunParameterORM(sf)
+            params = await param_orm.get_by_model_run(model_run_id)
+            if params is None:
+                print(f"[ingest_issues] No ModelRunParameter found for model_run_id={model_run_id}; skipping")
+                await engine.dispose()
+                return
+            token = params.token or os.environ.get("GITHUB_TOKEN", "")
+            start_date = params.start_date
+            end_date = params.end_date
+            keyword = params.keyword
 
+            try:
                 # Set up ORM helpers
                 repo_orm = RepositoryORM(sf)
                 issue_orm = IssueORM(sf)
@@ -612,9 +563,7 @@ def github_ingester():
                 # Create IssueIngestor
                 ingestor = IssueIngestor(github_token=token)
 
-                # Read the authoritative repository list from the DB.  This
-                # avoids relying on K8s-to-K8s XCom propagation and centralises
-                # the source of truth in the persistence layer.
+                # Read the authoritative repository list from the DB.
                 repositories = get_repositories_for_model_run(model_run_id)
 
                 # Process each repository
@@ -686,7 +635,7 @@ def github_ingester():
         get_logs=True,
         is_delete_operator_pod=False,
     )
-    def refresh_materialized_views(dto_json: str) -> None:
+    def refresh_materialized_views(model_run_id: int) -> None:
         """REFRESH the three ingestion-side materialised views.
 
         Runs after ingestion completes so that B1/B2/B3 reflect the newly
@@ -755,7 +704,7 @@ def github_ingester():
         get_logs=True,
         is_delete_operator_pod=False,
     )
-    def publish_enrichment_trigger(dto_json: str) -> None:
+    def publish_enrichment_trigger(model_run_id: int) -> None:
         """Publish ``model_run_id`` to the enrichment trigger channel.
 
         Fires after B1/B2/B3 materialised views have been refreshed, so the
@@ -787,9 +736,8 @@ def github_ingester():
         from horseless_repotracker.repotracker.sqlalchemy_model import ModelRun
         
         logger = logging.getLogger(__name__)
-        dto = ModelRunDTO.from_json(dto_json)
-        model_run_id = dto.model_run_id
-        # If DTO has no explicit model_run_id, attempt to upsert/read it.
+        # model_run_id is provided by upstream persist_model_run task
+        # If callers passed None, attempt to resolve via minimal upsert (edge-case)
         if not model_run_id:
             # Minimal upsert to obtain id. Create the async engine inside
             # the coroutine so creation and disposal happen on the same
@@ -802,16 +750,8 @@ def github_ingester():
                 try:
                     mr_table = ModelRun.__table__
                     model_run_kwargs = {}
-                    for col in mr_table.columns:
-                        if col.name == "xmin":
-                            continue
-                        if col.name == "started_at":
-                            model_run_kwargs["started_at"] = datetime.utcnow()
-                            continue
-                        if hasattr(dto, col.name):
-                            model_run_kwargs[col.name] = getattr(dto, col.name)
-                    model_run = ModelRun(**model_run_kwargs)
-                    return await ModelRunORM(sf).upsert(model_run)
+                    # No DTO present; perform no-op and return None
+                    return None
                 finally:
                     await engine.dispose()
 
@@ -830,6 +770,56 @@ def github_ingester():
         
         # Get GPU enrichment channel from environment
         gpu_channel = os.getenv("REDIS_PUBSUB_GPU_ENRICHMENT_CHANNEL", "modelrun_enriched_gpu")
+        # Build a full ModelRunDTO from persisted parameters for GPU consumers.
+        async def _build_dto():
+            url = PersistenceSQLAlchemy.get_async_postgres_db_url()
+            engine = create_async_engine(url, echo=False)
+            sf = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+            try:
+                from horseless_repotracker.repotracker.orm import ModelRunParameterORM
+                from horseless_repotracker.repotracker.sqlalchemy_model import SpectralConfig as SpectralConfigModel
+                from sqlalchemy import select
+                from horseless_repotracker.repotracker.dto import SpectralConfigDTO, ModelRunDTO as MRDTO
+
+                param_orm = ModelRunParameterORM(sf)
+                params = await param_orm.get_by_model_run(model_run_id)
+                if params is None:
+                    return None
+
+                # Attempt to load spectral config if present
+                sc_row = None
+                async with sf() as session:
+                    res = await session.execute(select(SpectralConfigModel).where(SpectralConfigModel.model_run_parameter_id == params.id))
+                    sc_row = res.scalar_one_or_none()
+
+                sc_dto = None
+                if sc_row is not None:
+                    sc_dict = {c.name: getattr(sc_row, c.name) for c in SpectralConfigModel.__table__.columns if c.name not in ("id", "model_run_parameter_id")}
+                    try:
+                        sc_dto = SpectralConfigDTO.from_dict(sc_dict)
+                    except Exception:
+                        sc_dto = SpectralConfigDTO(**sc_dict)
+
+                return MRDTO(
+                    repos=params.repos,
+                    start_date=params.start_date,
+                    end_date=params.end_date,
+                    model_name=params.model_name,
+                    token=params.token,
+                    keyword=params.keyword,
+                    output_dir=params.output_dir,
+                    reset_if_exists=params.reset_if_exists,
+                    model_run_id=model_run_id,
+                    spectral_config=sc_dto,
+                )
+            finally:
+                await engine.dispose()
+
+        dto = asyncio.run(_build_dto())
+        if dto is None:
+            logger.error("ModelRunParameter missing for model_run_id=%s — failing fast", model_run_id)
+            raise RuntimeError(f"Missing ModelRunParameter for model_run_id={model_run_id}")
+
         count = transport.publish_gpu_enrichment_trigger(gpu_enrichment_channel=gpu_channel, model_run_dto=dto)
         logger.info(
             "Published GPU enrichment trigger model_run_id=%d to %d subscriber(s) on channel=%s.",
@@ -844,14 +834,13 @@ def github_ingester():
     # Task chain
     # -----------------------------------------------------------------------
     dto_json = extract_dto_json()
-    # Fan-out dto_json to Kubernetes tasks. Persist/ingest/refresh/publish
-    # do not rely on K8s-to-K8s XCom return values — they are discarded.
+    # Fan-out: persist the ModelRunDTO, then propagate the hydrated model_run_id
     model_run_id = persist_model_run(dto_json)
-    repositories = ingest_repositories(dto_json)
-    repository_owners = ingest_repository_owners(dto_json)
-    issues = ingest_issues(dto_json)
-    refreshed = refresh_materialized_views(dto_json)
-    published = publish_enrichment_trigger(dto_json)
+    repositories = ingest_repositories(model_run_id)
+    repository_owners = ingest_repository_owners(model_run_id)
+    issues = ingest_issues(model_run_id)
+    refreshed = refresh_materialized_views(model_run_id)
+    published = publish_enrichment_trigger(model_run_id)
 
     # Enforce ordering explicitly via task edges
     # Ensure repository owners are ingested after repositories and before issues
