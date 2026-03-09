@@ -304,12 +304,9 @@ def github_ingester():
            and ``Issue`` row via PostgreSQL ``ON CONFLICT DO UPDATE``
            upserts.
 
-        Args:
-            model_run_id: The ``model_run.id`` returned by ``persist_model_run``.
-
         Returns:
-            List of fully-qualified repository names that were successfully
-            ingested (``["owner/repo", ...]``).
+            None. Repositories are persisted to the database; downstream tasks
+            should query via ``get_repositories_for_model_run(model_run_id)``.
         """
         import asyncio
         import json
@@ -601,9 +598,13 @@ def github_ingester():
                         # Persist users first (foreign key dependency)
                         for user in issue_result.users:
                             table = User.__table__
-                            values = {col.name: getattr(user, col.name, None) for col in table.columns}
+                            # Only include non-None values to avoid constraint violations
+                            values = {col.name: val for col in table.columns if (val := getattr(user, col.name, None)) is not None}
                             stmt = pg_insert(table).values(**values)
-                            update_cols = {c.name: stmt.excluded[c.name] for c in table.columns if c.name not in ("github_id", "model_run_id")}
+                            # Only update columns that have non-None values in the new data
+                            update_cols = {c.name: stmt.excluded[c.name] for c in table.columns 
+                                           if c.name not in ("github_id", "model_run_id") 
+                                           and getattr(user, c.name, None) is not None}
                             stmt = stmt.on_conflict_do_update(index_elements=["github_id", "model_run_id"], set_=update_cols)
                             async with sf() as session:
                                 async with session.begin():
