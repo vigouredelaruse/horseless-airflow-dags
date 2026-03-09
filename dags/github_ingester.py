@@ -145,8 +145,9 @@ def github_ingester():
         startup_timeout_seconds=600,
         get_logs=True,
         is_delete_operator_pod=False,
+        do_xcom_push=True,
     )
-    def persist_model_run(dto_json: str) -> None:
+    def persist_model_run(dto_json: str) -> int:
         """Deserialise a ModelRunDTO JSON string and persist the entity chain.
 
         Persists:
@@ -271,8 +272,9 @@ def github_ingester():
 
         model_run_id = asyncio.run(_persist())
         print(f"[persist_model_run] upserted model_run_id={model_run_id}")
-        # Airflow 3.x handles TaskFlow XCom return files for Kubernetes tasks
-        # automatically; do not manually create or fsync `/airflow/xcom/return.json`.
+        
+        # @task.kubernetes automatically handles XCom push via TaskFlow API
+        # No manual XCom write needed - the return value is automatically pushed
         return model_run_id
 
     @task.kubernetes(
@@ -284,9 +286,13 @@ def github_ingester():
         startup_timeout_seconds=600,
         get_logs=True,
         is_delete_operator_pod=False,
+        do_xcom_push=True,
     )
     def ingest_repositories(model_run_id: int) -> None:
         """Stream repositories from the ModelRunParameter and ingest issues.
+        
+        Args:
+            model_run_id: The model_run.id returned by persist_model_run via XCom.
 
         For each ``owner/repo`` string in :attr:`ModelRunParameter.repos`:
 
@@ -322,6 +328,8 @@ def github_ingester():
         from horseless_repotracker.repotracker.persistence_sqlalchemy import PersistenceSQLAlchemy
         from horseless_repotracker.repotracker.sqlalchemy_model import Issue, Label, Repository, User, ModelRun
         logger = logging.getLogger(__name__)
+        
+        print(f"[ingest_repositories] received model_run_id={model_run_id} via XCom")
 
         async def _stream_repositories(repos, token, sf, model_run_id):
             """Yield a persisted :class:`Repository` ORM for each owner/repo string."""
@@ -411,6 +419,9 @@ def github_ingester():
         list from the DB via `repotracker.messaging.get_repositories_for_model_run`
         and for each repository calls the RepositoryOwnerIngestor to fetch and
         persist the owner row.
+        
+        Args:
+            model_run_id: The model_run.id received via XCom.
         """
         import asyncio
         import logging
@@ -423,6 +434,7 @@ def github_ingester():
         from horseless_repotracker.repotracker.orm import (
             UserORM,
             OrganizationORM,
+            ModelRunParameterORM,
         )
         from horseless_repotracker.repotracker.ingestion import RepositoryOwnerIngestor
         from horseless_repotracker.repotracker.messaging import get_repositories_for_model_run
@@ -431,11 +443,10 @@ def github_ingester():
 
         logger = logging.getLogger(__name__)
         logger.setLevel(logging.INFO)
+        
+        print(f"[ingest_repository_owners] received model_run_id={model_run_id} via XCom")
 
         async def _ingest_owners():
-            from horseless_repotracker.repotracker.orm import ModelRunORM, ModelRunParameterORM
-            from horseless_repotracker.repotracker.sqlalchemy_model import ModelRun
-
             # DB async engine for ORM upserts
             url = PersistenceSQLAlchemy.get_async_postgres_db_url()
             engine = create_async_engine(url, echo=False)
@@ -500,8 +511,7 @@ def github_ingester():
         through :class:`IssueIngestor` and persists them to PostgreSQL.
 
         Args:
-            dto_json: JSON-serialized ModelRunDTO containing token and date range.
-            repositories: List of repository full_name strings (e.g., ["owner/repo1", "owner/repo2"]).
+            model_run_id: The model_run.id received via XCom.
         """
         import asyncio
         import json
@@ -532,6 +542,8 @@ def github_ingester():
         from horseless_repotracker.repotracker.sqlalchemy_model import Issue, Label, ModelRun, Repository, User
 
         logger = logging.getLogger(__name__)
+        
+        print(f"[ingest_issues] received model_run_id={model_run_id} via XCom")
 
         async def _ingest_issues():
             # Read token and date range from persisted parameters
@@ -733,8 +745,9 @@ def github_ingester():
         from horseless_repotracker.repotracker.sqlalchemy_model import ModelRun
         
         logger = logging.getLogger(__name__)
-        # model_run_id is provided by upstream persist_model_run task
-        # If callers passed None, attempt to resolve via minimal upsert (edge-case)
+        
+        print(f"[publish_enrichment_trigger] received model_run_id={model_run_id} via XCom")
+        
         if not model_run_id:
             # Minimal upsert to obtain id. Create the async engine inside
             # the coroutine so creation and disposal happen on the same
@@ -828,10 +841,11 @@ def github_ingester():
         return None
 
     # -----------------------------------------------------------------------
-    # Task chain
+    # Task chain - TaskFlow API with automatic XCom handling
     # -----------------------------------------------------------------------
     dto_json = extract_dto_json()
-    # Fan-out: persist the ModelRunDTO, then propagate the hydrated model_run_id
+    # persist_model_run returns int, which is automatically pushed to XCom
+    # All downstream tasks receive model_run_id automatically via TaskFlow
     model_run_id = persist_model_run(dto_json)
     repositories = ingest_repositories(model_run_id)
     repository_owners = ingest_repository_owners(model_run_id)
