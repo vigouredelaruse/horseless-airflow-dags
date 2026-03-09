@@ -176,12 +176,15 @@ def enrichment_handler():
         data = json.loads(payload["data"])
         return int(data["model_run_id"])
 
-    @task.virtualenv(
+    @task.kubernetes(
         task_id="run_enrichment_pipeline",
-        requirements=_VENV_REQUIREMENTS,
-        pip_install_options=_VENV_PIP_OPTIONS,
-        system_site_packages=True,
+        image="localhost:32000/horseless-repotracker:latest",
+        name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
+        image_pull_policy="IfNotPresent",
+        startup_timeout_seconds=600,
+        get_logs=True,
+        is_delete_operator_pod=False,
     )
     def run_enrichment_pipeline(model_run_id: int) -> int:
         """Load issues, run all enrichment stages, write per-stage artifacts.
@@ -627,12 +630,15 @@ def enrichment_handler():
         logger.info("Enrichment pipeline complete for model_run_id=%d.", model_run_id)
         return model_run_id
 
-    @task.virtualenv(
+    @task.kubernetes(
         task_id="refresh_analysis_ready_view",
-        requirements=_VENV_REQUIREMENTS,
-        pip_install_options=_VENV_PIP_OPTIONS,
-        system_site_packages=True,
+        image="localhost:32000/horseless-repotracker:latest",
+        name="k8s-env-task",
         env_vars=_VENV_ENV_VARS,
+        image_pull_policy="IfNotPresent",
+        startup_timeout_seconds=600,
+        get_logs=True,
+        is_delete_operator_pod=False,
     )
     def refresh_analysis_ready_view(model_run_id: int) -> int:
         """Refresh ``mv_analysis_ready`` after all artifact tables are populated.
@@ -683,4 +689,7 @@ def enrichment_handler():
     refresh_analysis_ready_view(enriched_run_id)
 
 
-enrichment_handler()
+dag = enrichment_handler()
+
+if __name__ == "__main__":
+    dag.test()

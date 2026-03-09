@@ -617,19 +617,21 @@ def github_ingester():
                                     table = Label.__table__
                                     values = {col.name: getattr(label, col.name) for col in table.columns}
                                     stmt = pg_insert(table).values(**values)
+                                    # Labels use (id, model_run_id) as the composite key
                                     update_cols = {c.name: stmt.excluded[c.name] for c in table.columns 
-                                                   if c.name not in ("github_id", "model_run_id")}
-                                    stmt = stmt.on_conflict_do_update(index_elements=["github_id", "model_run_id"], set_=update_cols)
+                                                   if c.name not in ("id", "model_run_id")}
+                                    stmt = stmt.on_conflict_do_update(index_elements=["id", "model_run_id"], set_=update_cols)
                                     await session.execute(stmt)
 
                                 # 3. Persist the issue (using ORM with existing session)
                                 issue_table = Issue.__table__
                                 issue_values = {col.name: getattr(issue_result.issue, col.name) for col in issue_table.columns}
                                 issue_stmt = pg_insert(issue_table).values(**issue_values)
+                                # Issue composite PK is (id, model_run_id)
                                 issue_update_cols = {c.name: issue_stmt.excluded[c.name] for c in issue_table.columns 
-                                                     if c.name not in ("github_id", "model_run_id")}
+                                                     if c.name not in ("id", "model_run_id")}
                                 issue_stmt = issue_stmt.on_conflict_do_update(
-                                    index_elements=["github_id", "model_run_id"], 
+                                    index_elements=["id", "model_run_id"], 
                                     set_=issue_update_cols
                                 )
                                 await session.execute(issue_stmt)
@@ -877,4 +879,10 @@ def github_ingester():
     model_run_id >> repositories >> repository_owners >> issues >> refreshed >> published
 
 
-github_ingester()
+# Instantiate the DAG object so it can be executed or tested from the CLI/IDE.
+dag = github_ingester()
+
+if __name__ == "__main__":
+    # Run the DAG in-process for local debugging. This executes all tasks
+    # serially in a single Python process and will fail-fast on errors.
+    dag.test()
