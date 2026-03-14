@@ -676,6 +676,7 @@ def github_ingester():
 
         Views refreshed
         ---------------
+        * ``mv_issues_enrichment_input``      (A1)
         * ``mv_event_counts_by_issue_bucket`` (B1)
         * ``mv_user_repo_activity``           (B2)
         * ``mv_issue_label_incidence``         (B3)
@@ -711,6 +712,7 @@ def github_ingester():
         try:
             with conn.cursor() as cur:
                 for view in (
+                    "mv_issues_enrichment_input",
                     "mv_event_counts_by_issue_bucket",
                     "mv_user_repo_activity",
                     "mv_issue_label_incidence",
