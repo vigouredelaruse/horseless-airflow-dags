@@ -1,0 +1,14 @@
+name: azure-devops
+version: 0.0.1
+schema: v1
+# NOTE: The Copilot version uses interactive ${input:ado_org} and ${input:ado_domain} prompts.
+# Continue does not support that pattern - set the values directly below.
+mcpServers:
+  - name: azure-devops
+    command: npx
+    args:
+      - -y
+      - "@azure-devops/mcp@latest"
+      - YOUR_ORG_NAME_HERE
+      - -d
+      - core,work,work-items,search,test-plans,repositories,wiki,pipelines,advanced-security

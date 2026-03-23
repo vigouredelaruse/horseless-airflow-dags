@@ -1,0 +1,12 @@
+name: airflow
+version: 0.0.1
+schema: v1
+mcpServers:
+  - name: airflow
+    command: uvx
+    args:
+      - airflow-mcp-server
+      - --base-url
+      - http://airflow.dubridge.ataxlab.com
+      - --auth-token
+      - eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwianRpIjoiMmI3ZWQ2Nzc0NDdjNGIzZTk1MTA2MjIzNWVhNGQxNTAiLCJhdWQiOiJhcGFjaGUtYWlyZmxvdyIsIm5iZiI6MTc3MjE1OTU1NCwiZXhwIjoxNzcyMjQ1OTU0LCJpYXQiOjE3NzIxNTk1NTR9.RjSIOe_gaHmMnTVibI9fK6WAa3z6hVZE6qOc6sB6RE0Bhquz3Ndhp8lMuYnRBzdQ0YahqUXOL9d3pSRz_n217w

@@ -1,0 +1,12 @@
+name: redis
+version: 0.0.1
+schema: v1
+mcpServers:
+  - name: redis
+    command: uvx
+    args:
+      - --from
+      - redis-mcp-server@latest
+      - redis-mcp-server
+      - --url
+      - redis://default:Pa55w0rd@critical-redis.dubridge.ataxlab.com:30379/0

@@ -1,0 +1,13 @@
+name: metaksidp
+version: 0.0.1
+schema: v1
+mcpServers:
+  - name: metaksidp
+    command: node
+    args:
+      - D:/ProgramData/nvm/nodejs/node_modules/keycloak-model-context-protocol/dist/index.js
+    env:
+      KEYCLOAK_URL: https://metak8sidp.dubridge.ataxlab.com
+      KEYCLOAK_ADMIN: sechele
+      KEYCLOAK_ADMIN_PASSWORD: Pa55W0rd
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
