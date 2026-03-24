@@ -11,9 +11,9 @@ from horseless_dag_env import DEFAULT_ARGS, VENV_REQUIREMENTS, VENV_PIP_OPTIONS,
 # The schema_reset channel carries serialised SchemaOperationsMessage JSON
 # strings published by any producer that wants a destructive schema reset.
 # Channel name is read from the Airflow Variables KV store
-# (key: REDIS_PUBSUB_SCHEMAOPS_RESET_CHANNEL); defaults to "schema_reset" to
-# match RedisTransport._SCHEMA_RESET_CHANNEL.
-_SCHEMA_RESET_CHANNEL = Variable.get("REDIS_PUBSUB_SCHEMAOPS_RESET_CHANNEL", default="schema_reset")
+# (key: REDIS_PUBSUB_SCHEMAOPS_RESET_CHANNEL); defaults to "reset_schema" to
+# match the live Airflow Variable value.
+_SCHEMA_RESET_CHANNEL = Variable.get("REDIS_PUBSUB_SCHEMAOPS_RESET_CHANNEL", default="reset_schema")
 
 schema_reset_trigger = MessageQueueTrigger(
     scheme="redis+pubsub",
